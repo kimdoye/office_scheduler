@@ -81,7 +81,7 @@ function generateMonthTemplate() {
            .setHorizontalAlignment("center");
 
   targetSheet.setColumnWidth(1, 180); // Name Column
-  targetSheet.setColumnWidth(2, 100); // Value Column
+  targetSheet.setColumnWidth(2, 5);   // Value Column (Almost collapsed)
   
   // Style the sidebar labels (Col A and B)
   targetSheet.getRange(5, 1, sidebarData.length, 2).setFontWeight("bold").setHorizontalAlignment("left");
