@@ -9,7 +9,8 @@ function generateSchedule() {
   // Configurations mapped directly to your screenshot
   const dayRow = 3;       // The row containing "Sun", "Mon", "Tue"...
   const adminStartRow = 5; // Jeff is on Row 5
-  const startCol = 2;      // Column B is index 2
+  const startCol = 3;      // Column C is index 3 (Calendar starts here)
+  const initialValueCol = 2; // Column B contains the initial "days worked" value
   
   const lastCol = sheet.getLastColumn();
   const lastRow = sheet.getLastRow();
@@ -17,16 +18,18 @@ function generateSchedule() {
 
   if (lastCol < startCol || numAdmins <= 0) return; // Exit if sheet is empty
 
-  // 1. Fetch data in bulk (much faster than cell-by-cell)
+  // 1. Fetch data in bulk
   const daysData = sheet.getRange(dayRow, startCol, 1, lastCol - startCol + 1).getValues()[0];
+  const initialValues = sheet.getRange(adminStartRow, initialValueCol, numAdmins, 1).getValues();
   const scheduleRange = sheet.getRange(adminStartRow, startCol, numAdmins, lastCol - startCol + 1);
   const scheduleData = scheduleRange.getValues();
   
   // Track weekly work counts and "off yesterday" status dynamically
-  let weeklyWorkCount = new Array(numAdmins).fill(0);
+  // Initialize from Column B values
+  let weeklyWorkCount = initialValues.map(row => Number(row[0]) || 0);
   let wasOffYesterday = new Array(numAdmins).fill(false);
 
-  // Map text days to numbers to match original logic
+  // Map text days to numbers
   const dayMap = {
     "Sun": 0, "Mon": 1, "Tue": 2, "Wed": 3, "Thu": 4, "Fri": 5, "Sat": 6
   };
@@ -34,12 +37,12 @@ function generateSchedule() {
   // Iterate through each column (day)
   for (let c = 0; c < daysData.length; c++) {
     let dayText = daysData[c];
-    if (!dayText) continue; // Skip if header is blank
+    if (!dayText) continue; 
     
     let dayOfWeek = dayMap[dayText];
 
-    // Reset weekly counter on Sunday
-    if (dayOfWeek === 0) {
+    // Reset weekly counter on Monday (1)
+    if (dayOfWeek === 1) {
       weeklyWorkCount = new Array(numAdmins).fill(0);
     }
 
@@ -47,7 +50,7 @@ function generateSchedule() {
 
     // 2. Analyze Admin Availability for the day
     for (let r = 0; r < numAdmins; r++) {
-      let cellValue = scheduleData[r][c]; // Get cell for specific admin on this day
+      let cellValue = scheduleData[r][c]; 
       let isRequestedOff = (cellValue === "NE");
       let hitMaxDays = (weeklyWorkCount[r] >= 5);
       
@@ -55,7 +58,7 @@ function generateSchedule() {
         index: r,
         canWork: !isRequestedOff && !hitMaxDays,
         requestedOff: isRequestedOff,
-        prefersOff: wasOffYesterday[r] // Two-in-a-row logic
+        prefersOff: wasOffYesterday[r] 
       });
     }
 
@@ -64,16 +67,15 @@ function generateSchedule() {
     let needsStrizkov = 0;
 
     if (dayOfWeek === 3 || dayOfWeek === 6) { // Wed or Sat
-      needsStrizkov = 2; // Palmovka closed
+      needsStrizkov = 2; 
     } else if (dayOfWeek === 5) { // Fri
-      needsPalmovka = 1; // Střížkov closed
+      needsPalmovka = 1; 
     } else {
       needsPalmovka = 1;
       needsStrizkov = 2;
     }
 
     // 4. Sorting logic for assignment
-    // Prioritize admins who can work. Deprioritize those who "prefer off" (yesterday was off).
     let availableAdmins = adminStatuses
       .filter(a => a.canWork)
       .sort((a, b) => (a.prefersOff === b.prefersOff) ? 0 : a.prefersOff ? 1 : -1);
@@ -81,7 +83,6 @@ function generateSchedule() {
     let results = new Array(numAdmins).fill("");
 
     // 5. Assigning Roles
-    // Assign Střížkov first (usually needs more people)
     for (let i = 0; i < needsStrizkov; i++) {
       if (availableAdmins.length > 0) {
         let admin = availableAdmins.shift();
@@ -90,7 +91,6 @@ function generateSchedule() {
       }
     }
 
-    // Assign Palmovka
     for (let i = 0; i < needsPalmovka; i++) {
       if (availableAdmins.length > 0) {
         let admin = availableAdmins.shift();
@@ -102,14 +102,12 @@ function generateSchedule() {
     // 6. Update statuses & memory array for the next day
     for (let r = 0; r < numAdmins; r++) {
       wasOffYesterday[r] = (results[r] === "" && scheduleData[r][c] !== "NE");
-      
-      // If they didn't specifically request "NE", update their schedule block
       if (scheduleData[r][c] !== "NE") {
         scheduleData[r][c] = results[r];
       }
     }
   }
 
-  // 7. Write everything back to the sheet in one swift motion
+  // 7. Write everything back
   scheduleRange.setValues(scheduleData);
 }
