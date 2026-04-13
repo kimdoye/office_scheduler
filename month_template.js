@@ -15,15 +15,16 @@ function generateMonthTemplate() {
     return;
   }
 
-  // 2. Grab names AND their background colors from source Column A
+  // 2. Grab names, values, AND their background colors from source Columns A & B
   const lastRowNames = sourceSheet.getLastRow();
-  let names = [];
+  let sidebarData = [];
   let nameBackgrounds = []; 
   
   if (lastRowNames >= 4) {
-    const nameRange = sourceSheet.getRange(4, 1, lastRowNames - 3, 1);
-    names = nameRange.getValues();
-    nameBackgrounds = nameRange.getBackgrounds();
+    // Fetch 2 columns (A and B) instead of 1
+    const sidebarRange = sourceSheet.getRange(4, 1, lastRowNames - 3, 2);
+    sidebarData = sidebarRange.getValues();
+    nameBackgrounds = sidebarRange.getBackgrounds();
   }
   
   const monthIndex = monthInput - 1; 
@@ -55,13 +56,13 @@ function generateMonthTemplate() {
   targetSheet.getRange(3, scheduleStartCol, 1, daysInMonth).setValues([dayNames]);
   targetSheet.getRange(4, scheduleStartCol, 1, daysInMonth).setValues([dayNumbers]);
 
-  // 6. Paste names and apply row background colors
-  if (names.length > 0) {
+  // 6. Paste names/values and apply row background colors
+  if (sidebarData.length > 0) {
     const dataRowStart = 5;
-    // Paste names into Column A
-    targetSheet.getRange(dataRowStart, 1, names.length, 1).setValues(names);
+    // Paste both columns into Column A and B
+    targetSheet.getRange(dataRowStart, 1, sidebarData.length, 2).setValues(sidebarData);
     
-    // Loop through each name and apply its color to the entire row
+    // Loop through each row and apply its color
     for (let i = 0; i < nameBackgrounds.length; i++) {
       const color = nameBackgrounds[i][0];
       if (color !== "#ffffff") {
@@ -71,8 +72,8 @@ function generateMonthTemplate() {
   }
 
   // 7. BIG BOX STYLING
-  const totalRows = names.length > 0 ? names.length + 4 : 15;
-  const totalCols = daysInMonth + 2; // Col A (Name) + Col B (Input) + Days
+  const totalRows = sidebarData.length > 0 ? sidebarData.length + 4 : 15;
+  const totalCols = daysInMonth + 2; 
   const fullRange = targetSheet.getRange(3, 1, totalRows - 2, totalCols);
 
   fullRange.setFontSize(14)
@@ -80,10 +81,10 @@ function generateMonthTemplate() {
            .setHorizontalAlignment("center");
 
   targetSheet.setColumnWidth(1, 180); // Name Column
-  targetSheet.setColumnWidth(2, 100); // New Input Column
+  targetSheet.setColumnWidth(2, 100); // Value Column
   
   // Style the sidebar labels (Col A and B)
-  targetSheet.getRange(5, 1, names.length, 2).setFontWeight("bold").setHorizontalAlignment("left");
+  targetSheet.getRange(5, 1, sidebarData.length, 2).setFontWeight("bold").setHorizontalAlignment("left");
 
   targetSheet.setColumnWidths(scheduleStartCol, daysInMonth, 70);
   targetSheet.setRowHeights(3, totalRows - 2, 45);
