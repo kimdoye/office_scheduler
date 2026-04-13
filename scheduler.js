@@ -10,19 +10,21 @@ function generateSchedule() {
   const dayRow = 3;       // The row containing "Sun", "Mon", "Tue"...
   const adminStartRow = 5; // Jeff is on Row 5
   const startCol = 2;      // Column B is index 2
-  const numAdmins = 3;     // Jeff, Tim, Ariana
   
   const lastCol = sheet.getLastColumn();
-  if (lastCol < startCol) return; // Exit if sheet is empty
+  const lastRow = sheet.getLastRow();
+  const numAdmins = lastRow - adminStartRow + 1;
+
+  if (lastCol < startCol || numAdmins <= 0) return; // Exit if sheet is empty
 
   // 1. Fetch data in bulk (much faster than cell-by-cell)
   const daysData = sheet.getRange(dayRow, startCol, 1, lastCol - startCol + 1).getValues()[0];
   const scheduleRange = sheet.getRange(adminStartRow, startCol, numAdmins, lastCol - startCol + 1);
   const scheduleData = scheduleRange.getValues();
   
-  // Track weekly work counts (Index 0: Jeff, 1: Tim, 2: Ariana)
-  let weeklyWorkCount = [0, 0, 0];
-  let wasOffYesterday = [false, false, false];
+  // Track weekly work counts and "off yesterday" status dynamically
+  let weeklyWorkCount = new Array(numAdmins).fill(0);
+  let wasOffYesterday = new Array(numAdmins).fill(false);
 
   // Map text days to numbers to match original logic
   const dayMap = {
@@ -38,7 +40,7 @@ function generateSchedule() {
 
     // Reset weekly counter on Sunday
     if (dayOfWeek === 0) {
-      weeklyWorkCount = [0, 0, 0];
+      weeklyWorkCount = new Array(numAdmins).fill(0);
     }
 
     let adminStatuses = []; 
@@ -76,7 +78,7 @@ function generateSchedule() {
       .filter(a => a.canWork)
       .sort((a, b) => (a.prefersOff === b.prefersOff) ? 0 : a.prefersOff ? 1 : -1);
 
-    let results = ["", "", ""];
+    let results = new Array(numAdmins).fill("");
 
     // 5. Assigning Roles
     // Assign Střížkov first (usually needs more people)
