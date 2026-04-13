@@ -1,6 +1,6 @@
 /**
  * Generates a monthly schedule template with large, roomy boxes.
- * Now captures and applies background colors from the source names.
+ * Includes a sidebar with Name (Col A) and an Input column (Col B).
  */
 function generateMonthTemplate() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -15,15 +15,15 @@ function generateMonthTemplate() {
     return;
   }
 
-  // 2. Grab names AND their background colors
+  // 2. Grab names AND their background colors from source Column A
   const lastRowNames = sourceSheet.getLastRow();
   let names = [];
-  let nameBackgrounds = []; // Array to store the colors
+  let nameBackgrounds = []; 
   
   if (lastRowNames >= 4) {
     const nameRange = sourceSheet.getRange(4, 1, lastRowNames - 3, 1);
     names = nameRange.getValues();
-    nameBackgrounds = nameRange.getBackgrounds(); // Get colors here
+    nameBackgrounds = nameRange.getBackgrounds();
   }
   
   const monthIndex = monthInput - 1; 
@@ -50,49 +50,51 @@ function generateMonthTemplate() {
     dayNumbers.push(d);
   }
 
-  // 5. Set the headers
-  targetSheet.getRange(3, 2, 1, daysInMonth).setValues([dayNames]);
-  targetSheet.getRange(4, 2, 1, daysInMonth).setValues([dayNumbers]);
+  // 5. Set the headers (Schedule now starts at Column 3 / Column C)
+  const scheduleStartCol = 3;
+  targetSheet.getRange(3, scheduleStartCol, 1, daysInMonth).setValues([dayNames]);
+  targetSheet.getRange(4, scheduleStartCol, 1, daysInMonth).setValues([dayNumbers]);
 
   // 6. Paste names and apply row background colors
   if (names.length > 0) {
     const dataRowStart = 5;
-    const nameColumnRange = targetSheet.getRange(dataRowStart, 1, names.length, 1);
-    
-    // Set the values
-    nameColumnRange.setValues(names);
+    // Paste names into Column A
+    targetSheet.getRange(dataRowStart, 1, names.length, 1).setValues(names);
     
     // Loop through each name and apply its color to the entire row
     for (let i = 0; i < nameBackgrounds.length; i++) {
       const color = nameBackgrounds[i][0];
-      // Only apply if the color isn't white/empty to keep it clean
       if (color !== "#ffffff") {
-        targetSheet.getRange(dataRowStart + i, 1, 1, daysInMonth + 1).setBackground(color);
+        targetSheet.getRange(dataRowStart + i, 1, 1, daysInMonth + 2).setBackground(color);
       }
     }
   }
 
   // 7. BIG BOX STYLING
   const totalRows = names.length > 0 ? names.length + 4 : 15;
-  const totalCols = daysInMonth + 1;
+  const totalCols = daysInMonth + 2; // Col A (Name) + Col B (Input) + Days
   const fullRange = targetSheet.getRange(3, 1, totalRows - 2, totalCols);
 
   fullRange.setFontSize(14)
            .setVerticalAlignment("middle")
            .setHorizontalAlignment("center");
 
-  targetSheet.setColumnWidth(1, 180); 
-  targetSheet.getRange(5, 1, names.length, 1).setFontWeight("bold").setHorizontalAlignment("left");
+  targetSheet.setColumnWidth(1, 180); // Name Column
+  targetSheet.setColumnWidth(2, 100); // New Input Column
+  
+  // Style the sidebar labels (Col A and B)
+  targetSheet.getRange(5, 1, names.length, 2).setFontWeight("bold").setHorizontalAlignment("left");
 
-  targetSheet.setColumnWidths(2, daysInMonth, 70);
+  targetSheet.setColumnWidths(scheduleStartCol, daysInMonth, 70);
   targetSheet.setRowHeights(3, totalRows - 2, 45);
 
-  // Header Colors (This overrides the row color for the top 2 header rows)
+  // Header Colors
   const headerRange = targetSheet.getRange(3, 1, 2, totalCols);
   headerRange.setBackground("#e2efda").setFontWeight("bold");
   
   // Apply borders
   fullRange.setBorder(true, true, true, true, true, true, "#000000", SpreadsheetApp.BorderStyle.SOLID);
 
-  targetSheet.setFrozenColumns(1);
+  // Freeze Name and Input columns
+  targetSheet.setFrozenColumns(2);
 }
