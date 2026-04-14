@@ -66,7 +66,13 @@ function generateSchedule() {
     let needsPalmovka = 0;
     let needsStrizkov = 0;
 
-    if (dayOfWeek === 3 || dayOfWeek === 6) { // Wed or Sat
+    const isFirstDay = (c === 0);
+    const isLastDay = (c === daysData.length - 1);
+
+    if (isFirstDay || isLastDay) {
+      needsPalmovka = 1;
+      needsStrizkov = 2;
+    } else if (dayOfWeek === 3 || dayOfWeek === 6) { // Wed or Sat
       needsStrizkov = 2; 
     } else if (dayOfWeek === 5) { // Fri
       needsPalmovka = 1; 
