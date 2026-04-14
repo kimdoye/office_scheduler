@@ -82,21 +82,27 @@ function generateSchedule() {
 
     let results = new Array(numAdmins).fill("");
 
-    // 5. Assigning Roles
-    for (let i = 0; i < needsStrizkov; i++) {
-      if (availableAdmins.length > 0) {
-        let admin = availableAdmins.shift();
-        results[admin.index] = "Střížkov";
-        weeklyWorkCount[admin.index]++;
-      }
+    // 5. Assigning Roles (Priority: 1st Střížkov -> 1st Palmovka -> 2nd Střížkov)
+    
+    // Assign 1st person to Střížkov
+    if (needsStrizkov > 0 && availableAdmins.length > 0) {
+      let admin = availableAdmins.shift();
+      results[admin.index] = "Střížkov";
+      weeklyWorkCount[admin.index]++;
     }
 
-    for (let i = 0; i < needsPalmovka; i++) {
-      if (availableAdmins.length > 0) {
-        let admin = availableAdmins.shift();
-        results[admin.index] = "Palmovka";
-        weeklyWorkCount[admin.index]++;
-      }
+    // Assign 1st person to Palmovka
+    if (needsPalmovka > 0 && availableAdmins.length > 0) {
+      let admin = availableAdmins.shift();
+      results[admin.index] = "Palmovka";
+      weeklyWorkCount[admin.index]++;
+    }
+
+    // Assign 2nd person to Střížkov (the "Preferred" staff)
+    if (needsStrizkov > 1 && availableAdmins.length > 0) {
+      let admin = availableAdmins.shift();
+      results[admin.index] = "Střížkov";
+      weeklyWorkCount[admin.index]++;
     }
 
     // 6. Update statuses & memory array for the next day
