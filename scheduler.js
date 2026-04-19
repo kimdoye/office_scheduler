@@ -7,6 +7,7 @@ function generateSchedule() {
   const sheet = ss.getActiveSheet();
   
   // Configurations mapped directly to your screenshot
+  const labelRow = 2;     // The row for closure labels (S/P)
   const dayRow = 3;       // The row containing "Sun", "Mon", "Tue"...
   const adminStartRow = 5; // Jeff is on Row 5
   const startCol = 3;      // Column C is index 3 (Calendar starts here)
@@ -24,8 +25,8 @@ function generateSchedule() {
   const scheduleRange = sheet.getRange(adminStartRow, startCol, numAdmins, lastCol - startCol + 1);
   const scheduleData = scheduleRange.getValues();
   
-  // Track weekly work counts and "off yesterday" status dynamically
-  // Initialize from Column B values
+  // Track weekly work counts, "off yesterday" status, and closure labels
+  let closureLabels = [];
   let weeklyWorkCount = initialValues.map(row => Number(row[0]) || 0);
   let wasOffYesterday = new Array(numAdmins).fill(false);
 
@@ -37,7 +38,10 @@ function generateSchedule() {
   // Iterate through each column (day)
   for (let c = 0; c < daysData.length; c++) {
     let dayText = daysData[c];
-    if (!dayText) continue; 
+    if (!dayText) {
+      closureLabels.push("");
+      continue; 
+    }
     
     let dayOfWeek = dayMap[dayText];
 
@@ -64,6 +68,12 @@ function generateSchedule() {
 
     // 3. Define Needs based on Location Logic
     const { needsPalmovka, needsStrizkov } = getNeedsForDay(dayOfWeek, (c === 0), (c === daysData.length - 1));
+
+    // Determine closure label for Row 2
+    let label = "";
+    if (needsPalmovka === 0) label = "P";
+    else if (needsStrizkov === 0) label = "S";
+    closureLabels.push(label);
 
     // 4. Sorting logic for assignment
     let availableAdmins = adminStatuses
@@ -119,6 +129,7 @@ function generateSchedule() {
   }
 
   // 7. Write everything back
+  sheet.getRange(labelRow, startCol, 1, closureLabels.length).setValues([closureLabels]);
   scheduleRange.setValues(scheduleData);
 }
 
