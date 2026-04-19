@@ -68,7 +68,18 @@ function generateSchedule() {
     // 4. Sorting logic for assignment
     let availableAdmins = adminStatuses
       .filter(a => a.canWork)
-      .sort((a, b) => (a.prefersOff === b.prefersOff) ? 0 : a.prefersOff ? 1 : -1);
+      .sort((a, b) => {
+        // Primary sort: Keep people who worked yesterday in shifts (prefersOff is false)
+        // to encourage consecutive work days and grouped days off.
+        if (a.prefersOff !== b.prefersOff) {
+          return a.prefersOff ? 1 : -1;
+        }
+        // Secondary sort: Prioritize people with the MOST remaining capacity (fewest days worked)
+        // to ensure we don't burn out specific staff early in the week.
+        let aCapacity = 5 - weeklyWorkCount[a.index];
+        let bCapacity = 5 - weeklyWorkCount[b.index];
+        return bCapacity - aCapacity; 
+      });
 
     let results = new Array(numAdmins).fill("");
 
@@ -137,32 +148,43 @@ function getNeedsForDay(dayOfWeek, isFirstDay, isLastDay) {
  * for mandatory shifts (1st Strizkov and 1st Palmovka) for the rest of the week.
  */
 function hasEnoughCapacityForRestOfWeek(currentCol, weeklyWorkCount, scheduleData, daysData, dayMap, numAdmins) {
-  // Identify the end of the current scheduling week (up to next Monday or end of data)
+  // Identify the end of the current scheduling week
   let endOfWeek = currentCol + 1;
   while (endOfWeek < daysData.length) {
     if (dayMap[daysData[endOfWeek]] === 1) break; // Monday starts a new week
     endOfWeek++;
   }
 
-  let mandatoryFutureShifts = 0;
+  // Copy current capacities to simulate future mandatory shifts
+  let capacities = weeklyWorkCount.map(w => 5 - w);
+
+  // Simulate assigning future mandatory shifts (1st Strizkov and 1st Palmovka)
   for (let c = currentCol + 1; c < endOfWeek; c++) {
     const { needsPalmovka, needsStrizkov } = getNeedsForDay(dayMap[daysData[c]], false, (c === daysData.length - 1));
-    if (needsPalmovka > 0) mandatoryFutureShifts++;
-    if (needsStrizkov > 0) mandatoryFutureShifts++;
-  }
+    let mandatoryToday = (needsPalmovka > 0 ? 1 : 0) + (needsStrizkov > 0 ? 1 : 0);
 
-  let totalRemainingCapacity = 0;
-  for (let r = 0; r < numAdmins; r++) {
-    let weeklyCapacityLeft = 5 - weeklyWorkCount[r];
-    let daysAvailable = 0;
-    for (let c = currentCol + 1; c < endOfWeek; c++) {
-      if (scheduleData[r][c] !== "NE") {
-        daysAvailable++;
+    // Get admins available today (not NE), sorted by remaining capacity descending
+    let availableToday = [];
+    for (let r = 0; r < numAdmins; r++) {
+      if (scheduleData[r][c] !== "NE" && capacities[r] > 0) {
+        availableToday.push(r);
       }
     }
-    totalRemainingCapacity += Math.min(weeklyCapacityLeft, daysAvailable);
+    availableToday.sort((a, b) => capacities[b] - capacities[a]);
+
+    // If we can't find enough distinct people for mandatory shifts today, return false
+    if (availableToday.length < mandatoryToday) {
+      return false;
+    }
+
+    // "Consume" capacity for the top candidates
+    for (let i = 0; i < mandatoryToday; i++) {
+      capacities[availableToday[i]]--;
+    }
   }
 
-  // We only assign the 2nd Strizkov if we have a surplus of capacity
-  return totalRemainingCapacity > mandatoryFutureShifts;
+  // After fulfilling all future mandatory shifts, we must have at least 1 spare capacity 
+  // left across all admins to afford assigning today's optional shift.
+  let remainingCapacity = capacities.reduce((sum, val) => sum + val, 0);
+  return remainingCapacity > 0;
 }
