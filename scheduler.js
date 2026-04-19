@@ -63,23 +63,7 @@ function generateSchedule() {
     }
 
     // 3. Define Needs based on Location Logic
-    let needsPalmovka = 0;
-    let needsStrizkov = 0;
-
-    const isFirstDay = (c === 0);
-    const isLastDay = (c === daysData.length - 1);
-
-    if (isFirstDay || isLastDay) {
-      needsPalmovka = 1;
-      needsStrizkov = 2;
-    } else if (dayOfWeek === 3 || dayOfWeek === 6) { // Wed or Sat
-      needsStrizkov = 2; 
-    } else if (dayOfWeek === 5) { // Fri
-      needsPalmovka = 1; 
-    } else {
-      needsPalmovka = 1;
-      needsStrizkov = 2;
-    }
+    const { needsPalmovka, needsStrizkov } = getNeedsForDay(dayOfWeek, (c === 0), (c === daysData.length - 1));
 
     // 4. Sorting logic for assignment
     let availableAdmins = adminStatuses
@@ -105,10 +89,13 @@ function generateSchedule() {
     }
 
     // Assign 2nd person to Střížkov (the "Preferred" staff)
+    // Only assign if we have enough capacity for mandatory shifts for the rest of the week
     if (needsStrizkov > 1 && availableAdmins.length > 0) {
-      let admin = availableAdmins.shift();
-      results[admin.index] = "Střížkov";
-      weeklyWorkCount[admin.index]++;
+      if (hasEnoughCapacityForRestOfWeek(c, weeklyWorkCount, scheduleData, daysData, dayMap, numAdmins)) {
+        let admin = availableAdmins.shift();
+        results[admin.index] = "Střížkov";
+        weeklyWorkCount[admin.index]++;
+      }
     }
 
     // 6. Update statuses & memory array for the next day
@@ -122,4 +109,60 @@ function generateSchedule() {
 
   // 7. Write everything back
   scheduleRange.setValues(scheduleData);
+}
+
+/**
+ * Helper to determine staffing needs for a given day.
+ */
+function getNeedsForDay(dayOfWeek, isFirstDay, isLastDay) {
+  let needsPalmovka = 0;
+  let needsStrizkov = 0;
+
+  if (isFirstDay || isLastDay) {
+    needsPalmovka = 1;
+    needsStrizkov = 2;
+  } else if (dayOfWeek === 3 || dayOfWeek === 6) { // Wed or Sat
+    needsStrizkov = 2; 
+  } else if (dayOfWeek === 5) { // Fri
+    needsPalmovka = 1; 
+  } else {
+    needsPalmovka = 1;
+    needsStrizkov = 2;
+  }
+  return { needsPalmovka, needsStrizkov };
+}
+
+/**
+ * Checks if assigning an extra optional shift today would leave enough capacity
+ * for mandatory shifts (1st Strizkov and 1st Palmovka) for the rest of the week.
+ */
+function hasEnoughCapacityForRestOfWeek(currentCol, weeklyWorkCount, scheduleData, daysData, dayMap, numAdmins) {
+  // Identify the end of the current scheduling week (up to next Monday or end of data)
+  let endOfWeek = currentCol + 1;
+  while (endOfWeek < daysData.length) {
+    if (dayMap[daysData[endOfWeek]] === 1) break; // Monday starts a new week
+    endOfWeek++;
+  }
+
+  let mandatoryFutureShifts = 0;
+  for (let c = currentCol + 1; c < endOfWeek; c++) {
+    const { needsPalmovka, needsStrizkov } = getNeedsForDay(dayMap[daysData[c]], false, (c === daysData.length - 1));
+    if (needsPalmovka > 0) mandatoryFutureShifts++;
+    if (needsStrizkov > 0) mandatoryFutureShifts++;
+  }
+
+  let totalRemainingCapacity = 0;
+  for (let r = 0; r < numAdmins; r++) {
+    let weeklyCapacityLeft = 5 - weeklyWorkCount[r];
+    let daysAvailable = 0;
+    for (let c = currentCol + 1; c < endOfWeek; c++) {
+      if (scheduleData[r][c] !== "NE") {
+        daysAvailable++;
+      }
+    }
+    totalRemainingCapacity += Math.min(weeklyCapacityLeft, daysAvailable);
+  }
+
+  // We only assign the 2nd Strizkov if we have a surplus of capacity
+  return totalRemainingCapacity > mandatoryFutureShifts;
 }
