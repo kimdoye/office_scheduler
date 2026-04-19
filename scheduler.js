@@ -129,7 +129,13 @@ function generateSchedule() {
   }
 
   // 7. Write everything back
-  sheet.getRange(labelRow, startCol, 1, closureLabels.length).setValues([closureLabels]);
+  const labelRange = sheet.getRange(labelRow, startCol, 1, closureLabels.length);
+  labelRange.setValues([closureLabels]);
+  
+  // Highlight closed buildings in yellow
+  const closureColors = closureLabels.map(label => label ? "#FFFF00" : null);
+  labelRange.setBackgrounds([closureColors]);
+
   scheduleRange.setValues(scheduleData);
 }
 
