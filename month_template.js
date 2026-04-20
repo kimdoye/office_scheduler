@@ -93,6 +93,9 @@ function generateMonthTemplate() {
 
   // Mark Weekly Off Days on Row 2
   for (let d = 1; d <= daysInMonth; d++) {
+    // Skip labeling for the 1st and last day of the month
+    if (d === 1 || d === daysInMonth) continue;
+
     const date = new Date(year, monthIndex, d);
     const jsDay = date.getDay();
     if (closedDaysOfWeek.has(jsDay)) {
