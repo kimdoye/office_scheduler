@@ -16,15 +16,21 @@ function generateMonthTemplate() {
   }
 
   // 2. Grab names, values, AND their background colors from source Columns A & B
-  const lastRowNames = sourceSheet.getLastRow();
+  const lastRow = sourceSheet.getLastRow();
   let sidebarData = [];
   let nameBackgrounds = []; 
+  let holidayData = [];
   
-  if (lastRowNames >= 4) {
-    // Fetch 2 columns (A and B) instead of 1
-    const sidebarRange = sourceSheet.getRange(4, 1, lastRowNames - 3, 2);
+  if (lastRow >= 4) {
+    // Fetch names and values (A and B)
+    const sidebarRange = sourceSheet.getRange(4, 1, lastRow - 3, 2);
     sidebarData = sidebarRange.getValues();
     nameBackgrounds = sidebarRange.getBackgrounds();
+
+    // Fetch holidays (D) independently
+    holidayData = sourceSheet.getRange(4, 4, lastRow - 3, 1).getValues()
+      .flat()
+      .filter(h => h !== "" && !isNaN(h));
   }
   
   const monthIndex = monthInput - 1; 
@@ -56,14 +62,29 @@ function generateMonthTemplate() {
   targetSheet.getRange(3, scheduleStartCol, 1, daysInMonth).setValues([dayNames]);
   targetSheet.getRange(4, scheduleStartCol, 1, daysInMonth).setValues([dayNumbers]);
 
+  // Mark Holidays on Row 2
+  if (holidayData.length > 0) {
+    holidayData.forEach(h => {
+      const dayNum = parseInt(h);
+      if (dayNum >= 1 && dayNum <= daysInMonth) {
+        targetSheet.getRange(2, scheduleStartCol + dayNum - 1)
+          .setValue("HOLIDAY")
+          .setBackground("yellow")
+          .setFontWeight("bold")
+          .setHorizontalAlignment("center")
+          .setVerticalAlignment("middle");
+      }
+    });
+    // Optional: Set row height for the holiday row
+    targetSheet.setRowHeight(2, 30);
+  }
+
   // 6. Paste names/values and apply row background colors
   if (sidebarData.length > 0) {
     const dataRowStart = 5;
-    // Paste both columns into Column A and B
     targetSheet.getRange(dataRowStart, 1, sidebarData.length, 2).setValues(sidebarData);
     
-    // Loop through each row and apply its color
-    for (let i = 0; i < nameBackgrounds.length; i++) {
+    for (let i = 0; i < sidebarData.length; i++) {
       const color = nameBackgrounds[i][0];
       if (color !== "#ffffff") {
         targetSheet.getRange(dataRowStart + i, 1, 1, daysInMonth + 2).setBackground(color);
