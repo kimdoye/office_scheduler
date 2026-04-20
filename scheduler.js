@@ -65,7 +65,7 @@ function generateSchedule() {
     }
 
     // 3. Define Needs based on Location Logic
-    const { needsPalmovka, needsStrizkov } = getNeedsForDay(dayOfWeek, (c === 0), (c === daysData.length - 1), closureData[c]);
+    const { needsPalmovka, needsStrizkov } = getNeedsForDay(dayOfWeek, closureData[c]);
 
     // 4. Sorting logic for assignment
     let availableAdmins = adminStatuses
@@ -127,14 +127,11 @@ function generateSchedule() {
 /**
  * Helper to determine staffing needs for a given day.
  */
-function getNeedsForDay(dayOfWeek, isFirstDay, isLastDay, closureLabel = "") {
+function getNeedsForDay(dayOfWeek, closureLabel = "") {
   let needsPalmovka = 0;
   let needsStrizkov = 0;
 
-  if (isFirstDay || isLastDay) {
-    needsPalmovka = 1;
-    needsStrizkov = 2;
-  } else if (dayOfWeek === 3 || dayOfWeek === 6) { // Wed or Sat
+  if (dayOfWeek === 3 || dayOfWeek === 6) { // Wed or Sat
     needsStrizkov = 2; 
   } else if (dayOfWeek === 5) { // Fri
     needsPalmovka = 1; 
@@ -179,7 +176,7 @@ function hasEnoughCapacityForRestOfWeek(currentCol, weeklyWorkCount, scheduleDat
 
   // Simulate assigning future mandatory shifts (1st Strizkov and 1st Palmovka)
   for (let c = currentCol + 1; c < endOfWeek; c++) {
-    const { needsPalmovka, needsStrizkov } = getNeedsForDay(dayMap[daysData[c]], false, (c === daysData.length - 1), closureData ? closureData[c] : "");
+    const { needsPalmovka, needsStrizkov } = getNeedsForDay(dayMap[daysData[c]], closureData ? closureData[c] : "");
     let mandatoryToday = (needsPalmovka > 0 ? 1 : 0) + (needsStrizkov > 0 ? 1 : 0);
 
     // Get admins available today (not NE), sorted by remaining capacity descending
