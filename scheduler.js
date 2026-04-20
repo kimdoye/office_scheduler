@@ -128,17 +128,9 @@ function generateSchedule() {
  * Helper to determine staffing needs for a given day.
  */
 function getNeedsForDay(dayOfWeek, closureLabel = "") {
-  let needsPalmovka = 0;
-  let needsStrizkov = 0;
+  let needsPalmovka = 1;
+  let needsStrizkov = 2;
 
-  if (dayOfWeek === 3 || dayOfWeek === 6) { // Wed or Sat
-    needsStrizkov = 2; 
-  } else if (dayOfWeek === 5) { // Fri
-    needsPalmovka = 1; 
-  } else {
-    needsPalmovka = 1;
-    needsStrizkov = 2;
-  }
 
   // Handle closures based on row 2 labels
   if (closureLabel) {
