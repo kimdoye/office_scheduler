@@ -125,7 +125,13 @@ function generateSchedule() {
   }
 
   // 7. Write everything back
+  const baseBackgrounds = sheet.getRange(adminStartRow, 1, numAdmins, 1).getBackgrounds();
+  const newBackgrounds = scheduleData.map((row, r) => 
+    row.map(cell => (cell === "NE" ? "yellow" : baseBackgrounds[r][0]))
+  );
+
   scheduleRange.setValues(scheduleData);
+  scheduleRange.setBackgrounds(newBackgrounds);
 }
 
 /**
