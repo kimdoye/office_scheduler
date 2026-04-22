@@ -53,7 +53,7 @@ function generateSchedule() {
     // 2. Analyze Admin Availability for the day
     for (let r = 0; r < numAdmins; r++) {
       let cellValue = scheduleData[r][c]; 
-      let isRequestedOff = (cellValue === "NE");
+      let isRequestedOff = (cellValue && cellValue.toString().toUpperCase() === "NE");
       let hitMaxDays = (weeklyWorkCount[r] >= 5);
       
       adminStatuses.push({
@@ -113,8 +113,12 @@ function generateSchedule() {
 
     // 6. Update statuses & memory array for the next day
     for (let r = 0; r < numAdmins; r++) {
-      wasOffYesterday[r] = (results[r] === "" && scheduleData[r][c] !== "NE");
-      if (scheduleData[r][c] !== "NE") {
+      const isNE = (scheduleData[r][c] && scheduleData[r][c].toString().toUpperCase() === "NE");
+      wasOffYesterday[r] = (results[r] === "" && !isNE);
+      
+      if (isNE) {
+        scheduleData[r][c] = "NE";
+      } else {
         scheduleData[r][c] = results[r];
       }
     }
@@ -174,7 +178,8 @@ function hasEnoughCapacityForRestOfWeek(currentCol, weeklyWorkCount, scheduleDat
     // Get admins available today (not NE), sorted by remaining capacity descending
     let availableToday = [];
     for (let r = 0; r < numAdmins; r++) {
-      if (scheduleData[r][c] !== "NE" && capacities[r] > 0) {
+      const isNE = (scheduleData[r][c] && scheduleData[r][c].toString().toUpperCase() === "NE");
+      if (!isNE && capacities[r] > 0) {
         availableToday.push(r);
       }
     }
