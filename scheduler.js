@@ -38,7 +38,7 @@ function generateSchedule() {
 
   // Iterate through each column (day)
   for (let c = 0; c < daysData.length; c++) {
-    let dayText = daysData[c];
+    let dayText = daysData[c] ? daysData[c].toString().trim() : "";
     if (!dayText) continue; 
     
     let dayOfWeek = dayMap[dayText];
@@ -53,7 +53,7 @@ function generateSchedule() {
     // 2. Analyze Admin Availability for the day
     for (let r = 0; r < numAdmins; r++) {
       let cellValue = scheduleData[r][c]; 
-      let isRequestedOff = (cellValue && cellValue.toString().toUpperCase() === "NE");
+      let isRequestedOff = (cellValue && cellValue.toString().toUpperCase().trim() === "NE");
       let hitMaxDays = (weeklyWorkCount[r] >= 5);
       
       adminStatuses.push({
@@ -68,7 +68,7 @@ function generateSchedule() {
     const { needsPalmovka, needsStrizkov } = getNeedsForDay(dayOfWeek, closureData[c]);
 
     // 3b. Special Holiday Logic: Everyone gets +1 day worked, nobody scheduled
-    const isHoliday = closureData[c] && closureData[c].toString().toUpperCase() === "HOLIDAY";
+    const isHoliday = closureData[c] && closureData[c].toString().toUpperCase().trim() === "HOLIDAY";
     if (isHoliday) {
       for (let r = 0; r < numAdmins; r++) {
         weeklyWorkCount[r]++;
@@ -121,8 +121,9 @@ function generateSchedule() {
 
     // 6. Update statuses & memory array for the next day
     for (let r = 0; r < numAdmins; r++) {
-      const isNE = (scheduleData[r][c] && scheduleData[r][c].toString().toUpperCase() === "NE");
-      wasOffYesterday[r] = (results[r] === "" && !isNE);
+      const isNE = (scheduleData[r][c] && scheduleData[r][c].toString().toUpperCase().trim() === "NE");
+      // "Off yesterday" is true if they didn't work. This resets their "consecutive days" bonus.
+      wasOffYesterday[r] = (results[r] === "");
       
       if (isNE) {
         scheduleData[r][c] = "NE";
@@ -152,7 +153,7 @@ function getNeedsForDay(dayOfWeek, closureLabel = "") {
 
   // Handle closures based on row 2 labels
   if (closureLabel) {
-    const labelUpper = closureLabel.toString().toUpperCase();
+    const labelUpper = closureLabel.toString().toUpperCase().trim();
     if (labelUpper === "HOLIDAY") {
       needsPalmovka = 0;
       needsStrizkov = 0;
