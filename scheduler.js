@@ -67,8 +67,16 @@ function generateSchedule() {
     // 3. Define Needs based on Location Logic
     const { needsPalmovka, needsStrizkov } = getNeedsForDay(dayOfWeek, closureData[c]);
 
+    // 3b. Special Holiday Logic: Everyone gets +1 day worked, nobody scheduled
+    const isHoliday = closureData[c] && closureData[c].toString().toUpperCase() === "HOLIDAY";
+    if (isHoliday) {
+      for (let r = 0; r < numAdmins; r++) {
+        weeklyWorkCount[r]++;
+      }
+    }
+
     // 4. Sorting logic for assignment
-    let availableAdmins = adminStatuses
+    let availableAdmins = (isHoliday) ? [] : adminStatuses
       .filter(a => a.canWork)
       .sort((a, b) => {
         // Primary sort: Keep people who worked yesterday in shifts (prefersOff is false)
@@ -178,6 +186,14 @@ function hasEnoughCapacityForRestOfWeek(currentCol, weeklyWorkCount, scheduleDat
 
   // Simulate assigning future mandatory shifts (1st Strizkov and 1st Palmovka)
   for (let c = currentCol + 1; c < endOfWeek; c++) {
+    const isHolidayFuture = closureData[c] && closureData[c].toString().toUpperCase() === "HOLIDAY";
+    if (isHolidayFuture) {
+      for (let r = 0; r < numAdmins; r++) {
+        capacities[r]--;
+      }
+      continue; // No mandatory shifts on holidays
+    }
+
     const { needsPalmovka, needsStrizkov } = getNeedsForDay(dayMap[daysData[c]], closureData ? closureData[c] : "");
     let mandatoryToday = (needsPalmovka > 0 ? 1 : 0) + (needsStrizkov > 0 ? 1 : 0);
 
