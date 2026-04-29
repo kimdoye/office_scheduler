@@ -92,7 +92,8 @@ function generateSchedule() {
 
     let results = new Array(numAdmins).fill("");
 
-    // 5. Assigning Roles (Priority: 1st Střížkov -> 1st Palmovka -> 2nd Střížkov)
+    // 5. Assigning Roles
+    // Priority: 1st Střížkov -> 1st Palmovka -> 2nd Střížkov -> 2nd Palmovka
     
     // Assign 1st person to Střížkov
     if (needsStrizkov > 0 && availableAdmins.length > 0) {
@@ -114,6 +115,16 @@ function generateSchedule() {
       if (hasEnoughCapacityForRestOfWeek(c, weeklyWorkLeft, scheduleData, daysData, dayMap, numAdmins, closureData)) {
         let admin = availableAdmins.shift();
         results[admin.index] = "Střížkov";
+        weeklyWorkLeft[admin.index] = Math.max(0, weeklyWorkLeft[admin.index] - 1);
+      }
+    }
+
+    // Assign 2nd person to Palmovka as the last-priority optional shift
+    // Only assign if we still have enough capacity for mandatory shifts for the rest of the week
+    if (needsPalmovka > 1 && availableAdmins.length > 0) {
+      if (hasEnoughCapacityForRestOfWeek(c, weeklyWorkLeft, scheduleData, daysData, dayMap, numAdmins, closureData)) {
+        let admin = availableAdmins.shift();
+        results[admin.index] = "Palmovka";
         weeklyWorkLeft[admin.index] = Math.max(0, weeklyWorkLeft[admin.index] - 1);
       }
     }
@@ -146,7 +157,7 @@ function generateSchedule() {
  * Helper to determine staffing needs for a given day.
  */
 function getNeedsForDay(dayOfWeek, closureLabel = "") {
-  let needsPalmovka = 1;
+  let needsPalmovka = 2;
   let needsStrizkov = 2;
 
 
@@ -186,7 +197,7 @@ function hasEnoughCapacityForRestOfWeek(currentCol, weeklyWorkLeft, scheduleData
 
   // Simulate assigning future mandatory shifts (1st Strizkov and 1st Palmovka)
   for (let c = currentCol + 1; c < endOfWeek; c++) {
-    const isHolidayFuture = closureData[c] && closureData[c].toString().toUpperCase() === "HOLIDAY";
+    const isHolidayFuture = closureData[c] && closureData[c].toString().toUpperCase().trim() === "HOLIDAY";
     if (isHolidayFuture) {
       for (let r = 0; r < numAdmins; r++) {
         capacities[r] = Math.max(0, capacities[r] - 1);
