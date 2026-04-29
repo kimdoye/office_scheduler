@@ -16,15 +16,29 @@ function generateMonthTemplate() {
   }
 
   // 2. Grab names, values, AND their background colors from source Columns A & B
-  const lastRowNames = sourceSheet.getLastRow();
+  const lastRow = sourceSheet.getLastRow();
   let sidebarData = [];
   let nameBackgrounds = []; 
+  let holidayData = [];
+  let weeklyOffData = [];
+  let locationData = [];
   
-  if (lastRowNames >= 4) {
-    // Fetch 2 columns (A and B) instead of 1
-    const sidebarRange = sourceSheet.getRange(4, 1, lastRowNames - 3, 2);
+  if (lastRow >= 4) {
+    // Fetch names and values (A and B)
+    const sidebarRange = sourceSheet.getRange(4, 1, lastRow - 3, 2);
     sidebarData = sidebarRange.getValues();
     nameBackgrounds = sidebarRange.getBackgrounds();
+
+    // Fetch holidays (D) independently
+    holidayData = sourceSheet.getRange(4, 4, lastRow - 3, 1).getValues()
+      .flat()
+      .filter(h => h !== "" && !isNaN(h));
+
+    // Fetch locations (E) independently
+    locationData = sourceSheet.getRange(4, 5, lastRow - 3, 1).getValues().flat();
+
+    // Fetch weekly days off (F-L) independently
+    weeklyOffData = sourceSheet.getRange(4, 6, lastRow - 3, 7).getValues();
   }
   
   const monthIndex = monthInput - 1; 
@@ -56,14 +70,69 @@ function generateMonthTemplate() {
   targetSheet.getRange(3, scheduleStartCol, 1, daysInMonth).setValues([dayNames]);
   targetSheet.getRange(4, scheduleStartCol, 1, daysInMonth).setValues([dayNumbers]);
 
+  // Determine which days of the week have an "X" in columns F-L
+  // Columns F-L map to: 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
+  const closedDaysOfWeek = new Map();
+  if (weeklyOffData.length > 0) {
+    weeklyOffData.forEach((row, rowIndex) => {
+      const locationName = locationData[rowIndex];
+      row.forEach((cell, index) => {
+        if (cell && cell.toString().toUpperCase() === "X") {
+          // JS Date getDay(): 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
+          const jsDay = index === 6 ? 0 : index + 1;
+          if (!closedDaysOfWeek.has(jsDay)) {
+            closedDaysOfWeek.set(jsDay, []);
+          }
+          if (locationName && !closedDaysOfWeek.get(jsDay).includes(locationName)) {
+            closedDaysOfWeek.get(jsDay).push(locationName);
+          }
+        }
+      });
+    });
+  }
+
+  // Mark Weekly Off Days on Row 2
+  for (let d = 1; d <= daysInMonth; d++) {
+    // Skip labeling for the 1st and last day of the month
+    if (d === 1 || d === daysInMonth) continue;
+
+    const date = new Date(year, monthIndex, d);
+    const jsDay = date.getDay();
+    if (closedDaysOfWeek.has(jsDay)) {
+      const label = closedDaysOfWeek.get(jsDay).join(" & ");
+      targetSheet.getRange(2, scheduleStartCol + d - 1)
+        .setValue(label)
+        .setBackground("yellow")
+        .setFontWeight("bold")
+        .setHorizontalAlignment("center")
+        .setVerticalAlignment("middle");
+    }
+  }
+
+  // Mark Holidays on Row 2
+  if (holidayData.length > 0) {
+    holidayData.forEach(h => {
+      const dayNum = parseInt(h);
+      if (dayNum >= 1 && dayNum <= daysInMonth) {
+        targetSheet.getRange(2, scheduleStartCol + dayNum - 1)
+          .setValue("HOLIDAY")
+          .setBackground("yellow")
+          .setFontWeight("bold")
+          .setHorizontalAlignment("center")
+          .setVerticalAlignment("middle");
+      }
+    });
+  }
+  
+  // Optional: Set row height for the holiday row
+  targetSheet.setRowHeight(2, 30);
+
   // 6. Paste names/values and apply row background colors
   if (sidebarData.length > 0) {
     const dataRowStart = 5;
-    // Paste both columns into Column A and B
     targetSheet.getRange(dataRowStart, 1, sidebarData.length, 2).setValues(sidebarData);
     
-    // Loop through each row and apply its color
-    for (let i = 0; i < nameBackgrounds.length; i++) {
+    for (let i = 0; i < sidebarData.length; i++) {
       const color = nameBackgrounds[i][0];
       if (color !== "#ffffff") {
         targetSheet.getRange(dataRowStart + i, 1, 1, daysInMonth + 2).setBackground(color);
