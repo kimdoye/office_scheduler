@@ -28,7 +28,7 @@ function generateSchedule() {
   
   // Track weekly work counts and "off yesterday" status dynamically
   // Initialize from Column B values
-  let weeklyWorkCount = initialValues.map(row => Number(row[0]) || 0);
+  let weeklyWorkCount = initialValues.map(row =>  5 -Number(row[0]) || 5);
   let wasOffYesterday = new Array(numAdmins).fill(false);
 
   // Map text days to numbers
