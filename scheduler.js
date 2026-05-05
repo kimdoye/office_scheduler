@@ -30,6 +30,7 @@ function generateSchedule() {
   // Initialize remaining days from Column B's "days worked" value.
   let weeklyWorkLeft = initialValues.map(row => Math.max(5 - Number(row[0]), 0) || 0);
   let wasOffYesterday = new Array(numAdmins).fill(false);
+  let current_streak = initialValues.map(row => Number(row[0]) || 0);
 
   // Map text days to numbers
   const dayMap = {
@@ -81,18 +82,23 @@ function generateSchedule() {
         score += Math.max(0, 50 - (buffer * 10));
       }
 
-      // Points for working yesterday (Max 20)
-      if (!wasOffYesterday[r]) {
-        score += 20;
+      // Points for consecutive work days
+      let streak = current_streak[r];
+      if (streak === 5) {
+        score -= 100; // Sharp dropoff for the 6th day
+      } else if (streak < 5) {
+        score += streak * 20; // Points go up to 5 days
       }
 
       // Points for more weekly capacity (Max 30)
       let capacity = weeklyWorkLeft[r];
       score += (capacity / 5) * 30;
 
+      let hitMaxStreak = (streak >= 6);
+
       adminStatuses.push({
         index: r,
-        canWork: !isRequestedOff && !hitMaxDays,
+        canWork: !isRequestedOff && !hitMaxDays && !hitMaxStreak,
         score: score
       });
     }
@@ -155,6 +161,14 @@ function generateSchedule() {
     // 6. Update statuses & memory array for the next day
     for (let r = 0; r < numAdmins; r++) {
       const isNE = (scheduleData[r][c] && scheduleData[r][c].toString().toUpperCase().trim() === "NE");
+      
+      // Update streak based on whether they were assigned a shift today
+      if (results[r] !== "") {
+        current_streak[r]++;
+      } else {
+        current_streak[r] = 0;
+      }
+
       // "Off yesterday" is true if they didn't work. This resets their "consecutive days" bonus.
       wasOffYesterday[r] = (results[r] === "");
       
