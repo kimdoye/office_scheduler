@@ -48,33 +48,45 @@ function generateSchedule() {
       weeklyWorkLeft = new Array(numAdmins).fill(5);
     }
 
-    // Calculate remaining NEs for the current week for each admin
-    // This allows us to prioritize people who have limited availability this week
-    let remainingNEs = new Array(numAdmins).fill(0);
-    let weekCheckCol = c;
-    while (weekCheckCol < daysData.length) {
-      if (weekCheckCol > c && dayMap[daysData[weekCheckCol]] === 1) break;
-      for (let r = 0; r < numAdmins; r++) {
-        if (scheduleData[r][weekCheckCol] && scheduleData[r][weekCheckCol].toString().toUpperCase().trim() === "NE") {
-          remainingNEs[r]++;
-        }
-      }
-      weekCheckCol++;
-    }
-
     let adminStatuses = []; 
 
-    // 2. Analyze Admin Availability for the day
+    // 2. Analyze Admin Availability & Calculate Priority Score for the day
     for (let r = 0; r < numAdmins; r++) {
       let cellValue = scheduleData[r][c]; 
       let isRequestedOff = (cellValue && cellValue.toString().toUpperCase().trim() === "NE");
       let hitMaxDays = (weeklyWorkLeft[r] == 0);
       
+      let score = 0;
+      
+      // Points for requested day offs (Max 50)
+      // Closer it is, more points it is worth.
+      let distToNextNE = -1;
+      for (let checkCol = c + 1; checkCol < daysData.length; checkCol++) {
+        if (scheduleData[r][checkCol] && scheduleData[r][checkCol].toString().toUpperCase().trim() === "NE") {
+          distToNextNE = checkCol - c;
+          break;
+        }
+      }
+      if (distToNextNE > 0) {
+        // e.g. dist 1 (tomorrow) = 50, dist 2 = 40, dist 3 = 30, dist 4 = 20, dist 5 = 10
+        score += Math.max(0, 50 - (distToNextNE - 1) * 10);
+      }
+
+      // Points for working yesterday (Max 20)
+      if (!wasOffYesterday[r]) {
+        score += 20;
+      }
+
+      // Points for more weekly capacity (Max 30)
+      let capacity = weeklyWorkLeft[r];
+      score += (capacity / 5) * 30;
+
       adminStatuses.push({
         index: r,
         canWork: !isRequestedOff && !hitMaxDays,
         requestedOff: isRequestedOff,
-        prefersOff: wasOffYesterday[r] 
+        prefersOff: wasOffYesterday[r],
+        score: score
       });
     }
 
@@ -92,25 +104,7 @@ function generateSchedule() {
     // 4. Sorting logic for assignment
     let availableAdmins = (isHoliday) ? [] : adminStatuses
       .filter(a => a.canWork)
-      .sort((a, b) => {
-        // Primary sort: Prioritize people with MORE 'NE' (Requested Off) entries 
-        // coming up this week. This ensures people with tight schedules get their shifts.
-        let aNEs = remainingNEs[a.index];
-        let bNEs = remainingNEs[b.index];
-        if (aNEs !== bNEs) {
-          return bNEs - aNEs; 
-        }
-
-        // Secondary sort: Keep people who worked yesterday in shifts (prefersOff is false)
-        // to encourage consecutive work days and grouped days off.
-        if (a.prefersOff !== b.prefersOff) {
-          return a.prefersOff ? 1 : -1;
-        }
-        // Tertiary sort: Prioritize people with the MOST remaining work days left.
-        let aCapacity = weeklyWorkLeft[a.index];
-        let bCapacity = weeklyWorkLeft[b.index];
-        return bCapacity - aCapacity; 
-      });
+      .sort((a, b) => b.score - a.score);
 
     let results = new Array(numAdmins).fill("");
 
