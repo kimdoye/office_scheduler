@@ -26,10 +26,9 @@ function generateSchedule() {
   const scheduleRange = sheet.getRange(adminStartRow, startCol, numAdmins, lastCol - startCol + 1);
   const scheduleData = scheduleRange.getValues();
   
-  // Track remaining work days and "off yesterday" status dynamically
+  // Track remaining work days dynamically
   // Initialize remaining days from Column B's "days worked" value.
   let weeklyWorkLeft = initialValues.map(row => Math.max(5 - Number(row[0]), 0) || 0);
-  let wasOffYesterday = new Array(numAdmins).fill(false);
   let current_streak = initialValues.map(row => Number(row[0]) || 0);
 
   // Map text days to numbers
@@ -169,9 +168,6 @@ function generateSchedule() {
         current_streak[r] = 0;
       }
 
-      // "Off yesterday" is true if they didn't work. This resets their "consecutive days" bonus.
-      wasOffYesterday[r] = (results[r] === "");
-      
       if (isNE) {
         scheduleData[r][c] = "NE";
       } else {
