@@ -93,8 +93,6 @@ function generateSchedule() {
       adminStatuses.push({
         index: r,
         canWork: !isRequestedOff && !hitMaxDays,
-        requestedOff: isRequestedOff,
-        prefersOff: wasOffYesterday[r],
         score: score
       });
     }
