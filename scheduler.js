@@ -87,7 +87,7 @@ function generateSchedule() {
       if (streak === 5) {
         score -= 100; // Sharp dropoff for the 6th day
       } else if (streak < 5) {
-        score += streak * 20; // Points go up to 5 days
+        score += streak * 10; // Points go up to 5 days
       }
 
       // Points for more weekly capacity (Max 30)
