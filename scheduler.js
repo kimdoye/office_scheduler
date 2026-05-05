@@ -58,18 +58,27 @@ function generateSchedule() {
       
       let score = 0;
       
-      // Points for requested day offs (Max 50)
-      // Closer it is, more points it is worth.
-      let distToNextNE = -1;
-      for (let checkCol = c + 1; checkCol < daysData.length; checkCol++) {
-        if (scheduleData[r][checkCol] && scheduleData[r][checkCol].toString().toUpperCase().trim() === "NE") {
-          distToNextNE = checkCol - c;
-          break;
+      // Points for scheduling scarcity (Max 50)
+      // The fewer available days they have left compared to the shifts they need, the more points.
+      let endOfWeek = c;
+      while (endOfWeek < daysData.length - 1) {
+        if (dayMap[daysData[endOfWeek + 1]] === 1) break; // Next day is Monday
+        endOfWeek++;
+      }
+      
+      let availableDaysLeft = 0;
+      for (let checkCol = c; checkCol <= endOfWeek; checkCol++) {
+        let isNEFuture = scheduleData[r][checkCol] && scheduleData[r][checkCol].toString().toUpperCase().trim() === "NE";
+        if (!isNEFuture) {
+          availableDaysLeft++;
         }
       }
-      if (distToNextNE > 0) {
-        // e.g. dist 1 (tomorrow) = 50, dist 2 = 40, dist 3 = 30, dist 4 = 20, dist 5 = 10
-        score += Math.max(0, 50 - (distToNextNE - 1) * 10);
+
+      let shiftsNeeded = weeklyWorkLeft[r];
+      if (shiftsNeeded > 0) {
+        let buffer = Math.max(0, availableDaysLeft - shiftsNeeded);
+        // buffer 0 = 50 pts, buffer 1 = 40 pts, buffer 2 = 30 pts, etc.
+        score += Math.max(0, 50 - (buffer * 10));
       }
 
       // Points for working yesterday (Max 20)
