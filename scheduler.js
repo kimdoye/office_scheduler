@@ -98,7 +98,7 @@ function generateSchedule() {
     }
 
     // 3. Define Needs based on Location Logic
-    const { needsPalmovka, needsStrizkov } = getNeedsForDay(dayOfWeek, closureData[c]);
+    const { needsPalmovka, needsStrizkov } = getNeedsForDay(closureData[c]);
 
     // 3b. Special Holiday Logic: Everyone uses one weekly day, nobody is scheduled
     const isHoliday = closureData[c] && closureData[c].toString().toUpperCase().trim() === "HOLIDAY";
@@ -179,7 +179,7 @@ function generateSchedule() {
 /**
  * Helper to determine staffing needs for a given day.
  */
-function getNeedsForDay(dayOfWeek, closureLabel = "") {
+function getNeedsForDay(closureLabel = "") {
   let needsPalmovka = 2;
   let needsStrizkov = 2;
 
@@ -228,7 +228,7 @@ function hasEnoughCapacityForRestOfWeek(currentCol, weeklyWorkLeft, scheduleData
       continue; // No mandatory shifts on holidays
     }
 
-    const { needsPalmovka, needsStrizkov } = getNeedsForDay(dayMap[daysData[c]], closureData ? closureData[c] : "");
+    const { needsPalmovka, needsStrizkov } = getNeedsForDay(closureData ? closureData[c] : "");
     let mandatoryToday = (needsPalmovka > 0 ? 1 : 0) + (needsStrizkov > 0 ? 1 : 0);
 
     // Get admins available today (not NE), sorted by remaining work days descending
