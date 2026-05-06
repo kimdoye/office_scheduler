@@ -9,9 +9,10 @@ function generateSchedule() {
   // Configurations mapped directly to your screenshot
   const closureRow = 2;   // The row containing closures/holidays
   const dayRow = 3;       // The row containing "Sun", "Mon", "Tue"...
-  const adminStartRow = 5; // Jeff is on Row 5
-  const startCol = 3;      // Column C is index 3 (Calendar starts here)
+  const adminStartRow = 5; // First admin is on Row 5
+  const startCol = 4;      // Column D is index 4 (Calendar starts here)
   const initialValueCol = 2; // Column B contains the initial "days worked" value
+  const consecutiveCol = 3;  // Column C contains the initial "consecutive days" value
   
   const lastCol = sheet.getLastColumn();
   const lastRow = sheet.getLastRow();
@@ -22,14 +23,15 @@ function generateSchedule() {
   // 1. Fetch data in bulk
   const daysData = sheet.getRange(dayRow, startCol, 1, lastCol - startCol + 1).getValues()[0];
   const closureData = sheet.getRange(closureRow, startCol, 1, lastCol - startCol + 1).getValues()[0];
-  const initialValues = sheet.getRange(adminStartRow, initialValueCol, numAdmins, 1).getValues();
+  const initialValues = sheet.getRange(adminStartRow, initialValueCol, numAdmins, 2).getValues(); // Fetch B and C
   const scheduleRange = sheet.getRange(adminStartRow, startCol, numAdmins, lastCol - startCol + 1);
   const scheduleData = scheduleRange.getValues();
   
   // Track remaining work days dynamically
-  // Initialize remaining days from Column B's "days worked" value.
+  // weeklyWorkLeft: Math.max(5 - Column B, 0)
+  // current_streak: Column C
   let weeklyWorkLeft = initialValues.map(row => Math.max(5 - Number(row[0]), 0) || 0);
-  let current_streak = initialValues.map(row => Number(row[0]) || 0);
+  let current_streak = initialValues.map(row => Number(row[1]) || 0);
 
   // Map text days to numbers
   const dayMap = {
