@@ -9,9 +9,10 @@ function generateSchedule() {
   // Configurations mapped directly to your screenshot
   const closureRow = 2;   // The row containing closures/holidays
   const dayRow = 3;       // The row containing "Sun", "Mon", "Tue"...
-  const adminStartRow = 5; // Jeff is on Row 5
-  const startCol = 3;      // Column C is index 3 (Calendar starts here)
+  const adminStartRow = 5; // First admin is on Row 5
+  const startCol = 4;      // Column D is index 4 (Calendar starts here)
   const initialValueCol = 2; // Column B contains the initial "days worked" value
+  const consecutiveCol = 3;  // Column C contains the initial "consecutive days" value
   
   const lastCol = sheet.getLastColumn();
   const lastRow = sheet.getLastRow();
@@ -22,14 +23,15 @@ function generateSchedule() {
   // 1. Fetch data in bulk
   const daysData = sheet.getRange(dayRow, startCol, 1, lastCol - startCol + 1).getValues()[0];
   const closureData = sheet.getRange(closureRow, startCol, 1, lastCol - startCol + 1).getValues()[0];
-  const initialValues = sheet.getRange(adminStartRow, initialValueCol, numAdmins, 1).getValues();
+  const initialValues = sheet.getRange(adminStartRow, initialValueCol, numAdmins, 2).getValues(); // Fetch B and C
   const scheduleRange = sheet.getRange(adminStartRow, startCol, numAdmins, lastCol - startCol + 1);
   const scheduleData = scheduleRange.getValues();
   
-  // Track weekly work counts, "off yesterday" status, and closure labels
-  let closureLabels = [];
-  let weeklyWorkCount = initialValues.map(row => Number(row[0]) || 0);
-  let wasOffYesterday = new Array(numAdmins).fill(false);
+  // Track remaining work days dynamically
+  // weeklyWorkLeft: Math.max(5 - Column B, 0)
+  // current_streak: Column C
+  let weeklyWorkLeft = initialValues.map(row => Math.max(5 - Number(row[0]), 0) || 0);
+  let current_streak = initialValues.map(row => Number(row[1]) || 0);
 
   // Map text days to numbers
   const dayMap = {
@@ -45,86 +47,129 @@ function generateSchedule() {
 
     // Reset weekly counter on Monday (1)
     if (dayOfWeek === 1) {
-      weeklyWorkCount = new Array(numAdmins).fill(0);
+      weeklyWorkLeft = new Array(numAdmins).fill(5);
     }
 
     let adminStatuses = []; 
 
-    // 2. Analyze Admin Availability for the day
+    // 2. Analyze Admin Availability & Calculate Priority Score for the day
     for (let r = 0; r < numAdmins; r++) {
       let cellValue = scheduleData[r][c]; 
       let isRequestedOff = (cellValue && cellValue.toString().toUpperCase().trim() === "NE");
-      let hitMaxDays = (weeklyWorkCount[r] >= 5);
+      let hitMaxDays = (weeklyWorkLeft[r] == 0);
       
+      let score = 0;
+      
+      // Points for scheduling scarcity (Max 50)
+      // The fewer available days they have left compared to the shifts they need, the more points.
+      let endOfWeek = c;
+      while (endOfWeek < daysData.length - 1) {
+        if (dayMap[daysData[endOfWeek + 1]] === 1) break; // Next day is Monday
+        endOfWeek++;
+      }
+      
+      let availableDaysLeft = 0;
+      for (let checkCol = c; checkCol <= endOfWeek; checkCol++) {
+        let isNEFuture = scheduleData[r][checkCol] && scheduleData[r][checkCol].toString().toUpperCase().trim() === "NE";
+        if (!isNEFuture) {
+          availableDaysLeft++;
+        }
+      }
+
+      let shiftsNeeded = weeklyWorkLeft[r];
+      if (shiftsNeeded > 0) {
+        let buffer = Math.max(0, availableDaysLeft - shiftsNeeded);
+        // buffer 0 = 50 pts, buffer 1 = 40 pts, buffer 2 = 30 pts, etc.
+        score += Math.max(0, 50 - (buffer * 10));
+      }
+
+      // Points for consecutive work days
+      let streak = current_streak[r];
+      if (streak === 5) {
+        score -= 100; // Sharp dropoff for the 6th day
+      } else if (streak < 5) {
+        score += streak * 10; // Points go up to 5 days
+      }
+
+      // Points for more weekly capacity (Max 30)
+      let capacity = weeklyWorkLeft[r];
+      score += (capacity / 5) * 30;
+
+      let hitMaxStreak = (streak >= 6);
+
       adminStatuses.push({
         index: r,
-        canWork: !isRequestedOff && !hitMaxDays,
-        requestedOff: isRequestedOff,
-        prefersOff: wasOffYesterday[r] 
+        canWork: !isRequestedOff && !hitMaxDays && !hitMaxStreak,
+        score: score
       });
     }
 
     // 3. Define Needs based on Location Logic
-    const { needsPalmovka, needsStrizkov } = getNeedsForDay(dayOfWeek, closureData[c]);
+    const { needsPalmovka, needsStrizkov } = getNeedsForDay(closureData[c]);
 
-    // 3b. Special Holiday Logic: Everyone gets +1 day worked, nobody scheduled
+    // 3b. Special Holiday Logic: Everyone uses one weekly day, nobody is scheduled
     const isHoliday = closureData[c] && closureData[c].toString().toUpperCase().trim() === "HOLIDAY";
     if (isHoliday) {
       for (let r = 0; r < numAdmins; r++) {
-        weeklyWorkCount[r]++;
+        weeklyWorkLeft[r] = Math.max(0, weeklyWorkLeft[r] - 1);
       }
     }
 
     // 4. Sorting logic for assignment
     let availableAdmins = (isHoliday) ? [] : adminStatuses
       .filter(a => a.canWork)
-      .sort((a, b) => {
-        // Primary sort: Keep people who worked yesterday in shifts (prefersOff is false)
-        // to encourage consecutive work days and grouped days off.
-        if (a.prefersOff !== b.prefersOff) {
-          return a.prefersOff ? 1 : -1;
-        }
-        // Secondary sort: Prioritize people with the MOST remaining capacity (fewest days worked)
-        // to ensure we don't burn out specific staff early in the week.
-        let aCapacity = 5 - weeklyWorkCount[a.index];
-        let bCapacity = 5 - weeklyWorkCount[b.index];
-        return bCapacity - aCapacity; 
-      });
+      .sort((a, b) => b.score - a.score);
 
     let results = new Array(numAdmins).fill("");
 
-    // 5. Assigning Roles (Priority: 1st Střížkov -> 1st Palmovka -> 2nd Střížkov)
+    // 5. Assigning Roles
+    // Priority: 1st Střížkov -> 1st Palmovka -> 2nd Střížkov -> 2nd Palmovka
     
     // Assign 1st person to Střížkov
     if (needsStrizkov > 0 && availableAdmins.length > 0) {
       let admin = availableAdmins.shift();
       results[admin.index] = "Střížkov";
-      weeklyWorkCount[admin.index]++;
+      weeklyWorkLeft[admin.index] = Math.max(0, weeklyWorkLeft[admin.index] - 1);
     }
 
     // Assign 1st person to Palmovka
     if (needsPalmovka > 0 && availableAdmins.length > 0) {
       let admin = availableAdmins.shift();
       results[admin.index] = "Palmovka";
-      weeklyWorkCount[admin.index]++;
+      weeklyWorkLeft[admin.index] = Math.max(0, weeklyWorkLeft[admin.index] - 1);
     }
 
     // Assign 2nd person to Střížkov (the "Preferred" staff)
     // Only assign if we have enough capacity for mandatory shifts for the rest of the week
     if (needsStrizkov > 1 && availableAdmins.length > 0) {
-      if (hasEnoughCapacityForRestOfWeek(c, weeklyWorkCount, scheduleData, daysData, dayMap, numAdmins, closureData)) {
+      if (hasEnoughCapacityForRestOfWeek(c, weeklyWorkLeft, scheduleData, daysData, dayMap, numAdmins, closureData)) {
         let admin = availableAdmins.shift();
         results[admin.index] = "Střížkov";
-        weeklyWorkCount[admin.index]++;
+        weeklyWorkLeft[admin.index] = Math.max(0, weeklyWorkLeft[admin.index] - 1);
+      }
+    }
+
+    // Assign 2nd person to Palmovka as the last-priority optional shift
+    // Only assign if we still have enough capacity for mandatory shifts for the rest of the week
+    if (needsPalmovka > 1 && availableAdmins.length > 0) {
+      if (hasEnoughCapacityForRestOfWeek(c, weeklyWorkLeft, scheduleData, daysData, dayMap, numAdmins, closureData)) {
+        let admin = availableAdmins.shift();
+        results[admin.index] = "Palmovka";
+        weeklyWorkLeft[admin.index] = Math.max(0, weeklyWorkLeft[admin.index] - 1);
       }
     }
 
     // 6. Update statuses & memory array for the next day
     for (let r = 0; r < numAdmins; r++) {
       const isNE = (scheduleData[r][c] && scheduleData[r][c].toString().toUpperCase().trim() === "NE");
-      // "Off yesterday" is true if they didn't work. This resets their "consecutive days" bonus.
-      wasOffYesterday[r] = (results[r] === "");
       
+      // Update streak based on whether they were assigned a shift today
+      if (results[r] !== "") {
+        current_streak[r]++;
+      } else {
+        current_streak[r] = 0;
+      }
+
       if (isNE) {
         scheduleData[r][c] = "NE";
       } else {
@@ -146,8 +191,8 @@ function generateSchedule() {
 /**
  * Helper to determine staffing needs for a given day.
  */
-function getNeedsForDay(dayOfWeek, closureLabel = "") {
-  let needsPalmovka = 1;
+function getNeedsForDay(closureLabel = "") {
+  let needsPalmovka = 2;
   let needsStrizkov = 2;
 
 
@@ -174,7 +219,7 @@ function getNeedsForDay(dayOfWeek, closureLabel = "") {
  * Checks if assigning an extra optional shift today would leave enough capacity
  * for mandatory shifts (1st Strizkov and 1st Palmovka) for the rest of the week.
  */
-function hasEnoughCapacityForRestOfWeek(currentCol, weeklyWorkCount, scheduleData, daysData, dayMap, numAdmins, closureData) {
+function hasEnoughCapacityForRestOfWeek(currentCol, weeklyWorkLeft, scheduleData, daysData, dayMap, numAdmins, closureData) {
   // Identify the end of the current scheduling week
   let endOfWeek = currentCol + 1;
   while (endOfWeek < daysData.length) {
@@ -182,23 +227,23 @@ function hasEnoughCapacityForRestOfWeek(currentCol, weeklyWorkCount, scheduleDat
     endOfWeek++;
   }
 
-  // Copy current capacities to simulate future mandatory shifts
-  let capacities = weeklyWorkCount.map(w => 5 - w);
+  // Copy remaining work days to simulate future mandatory shifts
+  let capacities = [...weeklyWorkLeft];
 
   // Simulate assigning future mandatory shifts (1st Strizkov and 1st Palmovka)
   for (let c = currentCol + 1; c < endOfWeek; c++) {
-    const isHolidayFuture = closureData[c] && closureData[c].toString().toUpperCase() === "HOLIDAY";
+    const isHolidayFuture = closureData[c] && closureData[c].toString().toUpperCase().trim() === "HOLIDAY";
     if (isHolidayFuture) {
       for (let r = 0; r < numAdmins; r++) {
-        capacities[r]--;
+        capacities[r] = Math.max(0, capacities[r] - 1);
       }
       continue; // No mandatory shifts on holidays
     }
 
-    const { needsPalmovka, needsStrizkov } = getNeedsForDay(dayMap[daysData[c]], closureData ? closureData[c] : "");
+    const { needsPalmovka, needsStrizkov } = getNeedsForDay(closureData ? closureData[c] : "");
     let mandatoryToday = (needsPalmovka > 0 ? 1 : 0) + (needsStrizkov > 0 ? 1 : 0);
 
-    // Get admins available today (not NE), sorted by remaining capacity descending
+    // Get admins available today (not NE), sorted by remaining work days descending
     let availableToday = [];
     for (let r = 0; r < numAdmins; r++) {
       const isNE = (scheduleData[r][c] && scheduleData[r][c].toString().toUpperCase() === "NE");

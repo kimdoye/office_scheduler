@@ -15,7 +15,7 @@ function generateMonthTemplate() {
     return;
   }
 
-  // 2. Grab names, values, AND their background colors from source Columns A & B
+  // 2. Grab names, values, AND their background colors from source Columns A, B & C
   const lastRow = sourceSheet.getLastRow();
   let sidebarData = [];
   let nameBackgrounds = []; 
@@ -24,21 +24,21 @@ function generateMonthTemplate() {
   let locationData = [];
   
   if (lastRow >= 4) {
-    // Fetch names and values (A and B)
-    const sidebarRange = sourceSheet.getRange(4, 1, lastRow - 3, 2);
+    // Fetch names and values (A, B and C)
+    const sidebarRange = sourceSheet.getRange(4, 1, lastRow - 3, 3);
     sidebarData = sidebarRange.getValues();
     nameBackgrounds = sidebarRange.getBackgrounds();
 
-    // Fetch holidays (D) independently
-    holidayData = sourceSheet.getRange(4, 4, lastRow - 3, 1).getValues()
+    // Fetch holidays (E) independently (Shifted from D)
+    holidayData = sourceSheet.getRange(4, 5, lastRow - 3, 1).getValues()
       .flat()
       .filter(h => h !== "" && !isNaN(h));
 
-    // Fetch locations (E) independently
-    locationData = sourceSheet.getRange(4, 5, lastRow - 3, 1).getValues().flat();
+    // Fetch locations (F) independently (Shifted from E)
+    locationData = sourceSheet.getRange(4, 6, lastRow - 3, 1).getValues().flat();
 
-    // Fetch weekly days off (F-L) independently
-    weeklyOffData = sourceSheet.getRange(4, 6, lastRow - 3, 7).getValues();
+    // Fetch weekly days off (G-M) independently (Shifted from F-L)
+    weeklyOffData = sourceSheet.getRange(4, 7, lastRow - 3, 7).getValues();
   }
   
   const monthIndex = monthInput - 1; 
@@ -65,8 +65,8 @@ function generateMonthTemplate() {
     dayNumbers.push(d);
   }
 
-  // 5. Set the headers (Schedule now starts at Column 3 / Column C)
-  const scheduleStartCol = 3;
+  // 5. Set the headers (Schedule now starts at Column 4 / Column D)
+  const scheduleStartCol = 4;
   targetSheet.getRange(3, scheduleStartCol, 1, daysInMonth).setValues([dayNames]);
   targetSheet.getRange(4, scheduleStartCol, 1, daysInMonth).setValues([dayNumbers]);
 
@@ -130,19 +130,19 @@ function generateMonthTemplate() {
   // 6. Paste names/values and apply row background colors
   if (sidebarData.length > 0) {
     const dataRowStart = 5;
-    targetSheet.getRange(dataRowStart, 1, sidebarData.length, 2).setValues(sidebarData);
+    targetSheet.getRange(dataRowStart, 1, sidebarData.length, 3).setValues(sidebarData);
     
     for (let i = 0; i < sidebarData.length; i++) {
       const color = nameBackgrounds[i][0];
       if (color !== "#ffffff") {
-        targetSheet.getRange(dataRowStart + i, 1, 1, daysInMonth + 2).setBackground(color);
+        targetSheet.getRange(dataRowStart + i, 1, 1, daysInMonth + 3).setBackground(color);
       }
     }
   }
 
   // 7. BIG BOX STYLING
   const totalRows = sidebarData.length > 0 ? sidebarData.length + 4 : 15;
-  const totalCols = daysInMonth + 2; 
+  const totalCols = daysInMonth + 3; 
   const fullRange = targetSheet.getRange(3, 1, totalRows - 2, totalCols);
 
   fullRange.setFontSize(14)
@@ -151,9 +151,10 @@ function generateMonthTemplate() {
 
   targetSheet.setColumnWidth(1, 180); // Name Column
   targetSheet.setColumnWidth(2, 5);   // Value Column (Almost collapsed)
+  targetSheet.setColumnWidth(3, 5);   // Consecutive Column (Almost collapsed)
   
-  // Style the sidebar labels (Col A and B)
-  targetSheet.getRange(5, 1, sidebarData.length, 2).setFontWeight("bold").setHorizontalAlignment("left");
+  // Style the sidebar labels (Col A, B and C)
+  targetSheet.getRange(5, 1, sidebarData.length, 3).setFontWeight("bold").setHorizontalAlignment("left");
 
   targetSheet.setColumnWidths(scheduleStartCol, daysInMonth, 70);
   targetSheet.setRowHeights(3, totalRows - 2, 45);
@@ -166,5 +167,5 @@ function generateMonthTemplate() {
   fullRange.setBorder(true, true, true, true, true, true, "#000000", SpreadsheetApp.BorderStyle.SOLID);
 
   // Freeze Name and Input columns
-  targetSheet.setFrozenColumns(2);
+  targetSheet.setFrozenColumns(3);
 }
