@@ -45,7 +45,7 @@ function generateSchedule() {
       weeklyWorkLeft = new Array(numAdmins).fill(5);
     }
 
-    const adminStatuses = getAdminStatusesForDay(c, numAdmins, scheduleData, daysData, weeklyWorkLeft, current_streak);
+    const adminStatuses = getAdminStatusesForDay(c, numAdmins, scheduleData, daysData, weeklyWorkLeft, current_streak, closureData);
 
     // 3. Define Needs based on Location Logic
     const { needsPalmovka, needsStrizkov } = getNeedsForDay(closureData[c]);
@@ -92,7 +92,7 @@ function generateSchedule() {
       }
     }
 
-    applyDayResults(c, numAdmins, scheduleData, results, current_streak);
+    applyDayResults(c, numAdmins, scheduleData, results, current_streak, closureData);
   }
 
   // 7. Write everything back
@@ -139,24 +139,34 @@ function findEndOfWeek(currentCol, daysData) {
   return endOfWeek;
 }
 
-function getAdminStatusesForDay(currentCol, numAdmins, scheduleData, daysData, weeklyWorkLeft, currentStreak) {
+function getAdminStatusesForDay(currentCol, numAdmins, scheduleData, daysData, weeklyWorkLeft, currentStreak, closureData) {
   const statuses = [];
 
   for (let r = 0; r < numAdmins; r++) {
     const streak = currentStreak[r];
+    const isHolidayToday = isHoliday(closureData[currentCol]);
+    
+    // Check if taking today off would make it impossible to reach 5 shifts in some future week
+    const forcedToWork = !isHolidayToday && !isRequestedOff(scheduleData[r][currentCol]) && 
+                         isForcedToWork(r, currentCol, scheduleData, daysData, weeklyWorkLeft, currentStreak, closureData);
 
     statuses.push({
       index: r,
       canWork: !isRequestedOff(scheduleData[r][currentCol]) && weeklyWorkLeft[r] !== 0 && streak < 6,
-      score: calculateAdminScore(r, currentCol, scheduleData, daysData, weeklyWorkLeft, streak)
+      score: calculateAdminScore(r, currentCol, scheduleData, daysData, weeklyWorkLeft, streak, forcedToWork)
     });
   }
 
   return statuses;
 }
 
-function calculateAdminScore(adminIndex, currentCol, scheduleData, daysData, weeklyWorkLeft, streak) {
+function calculateAdminScore(adminIndex, currentCol, scheduleData, daysData, weeklyWorkLeft, streak, forcedToWork) {
   let score = 0;
+
+  // PRIORITY 1: Forced to work (Lookahead failure)
+  if (forcedToWork) {
+    score += 1000;
+  }
 
   // Points for scheduling scarcity (Max 50)
   // The fewer available days they have left compared to the shifts they need, the more points.
@@ -207,9 +217,11 @@ function assignShift(results, availableAdmins, weeklyWorkLeft, location) {
   weeklyWorkLeft[admin.index] = Math.max(0, weeklyWorkLeft[admin.index] - 1);
 }
 
-function applyDayResults(currentCol, numAdmins, scheduleData, results, currentStreak) {
+function applyDayResults(currentCol, numAdmins, scheduleData, results, currentStreak, closureData) {
   for (let r = 0; r < numAdmins; r++) {
-    if (results[r] !== "") {
+    const holiday = isHoliday(closureData[currentCol]);
+
+    if (results[r] !== "" || holiday) {
       currentStreak[r]++;
     } else {
       currentStreak[r] = 0;
@@ -217,7 +229,7 @@ function applyDayResults(currentCol, numAdmins, scheduleData, results, currentSt
 
     if (isRequestedOff(scheduleData[r][currentCol])) {
       scheduleData[r][currentCol] = "NE";
-    } else {
+    } else if (!holiday) {
       scheduleData[r][currentCol] = results[r];
     }
   }
@@ -301,4 +313,71 @@ function hasEnoughCapacityForRestOfWeek(currentCol, weeklyWorkLeft, scheduleData
   // left across all admins to afford assigning today's optional shift.
   let remainingCapacity = capacities.reduce((sum, val) => sum + val, 0);
   return remainingCapacity > 0;
+}
+
+/**
+ * Determines if an admin MUST work today because taking it off would
+ * lead to a failed schedule (under 5 shifts) in a future week due to streak limits.
+ */
+function isForcedToWork(adminIndex, currentCol, scheduleData, daysData, weeklyWorkLeft, currentStreak, closureData) {
+  // Scenario A: Work Today
+  const bufferWork = simulateMinBuffer(adminIndex, currentCol, true, scheduleData, daysData, weeklyWorkLeft, currentStreak, closureData);
+  
+  // Scenario B: Take Today Off
+  const bufferOff = simulateMinBuffer(adminIndex, currentCol, false, scheduleData, daysData, weeklyWorkLeft, currentStreak, closureData);
+
+  // Forced to work if Scenario B fails in any future week, but Scenario A succeeds (or is less bad)
+  return bufferOff < 0 && bufferWork >= bufferOff;
+}
+
+/**
+ * Simulates the maximum possible shifts an admin can work for the rest of the month
+ * and returns the minimum "buffer" (actual shifts - target shifts) found across all remaining weeks.
+ */
+function simulateMinBuffer(adminIndex, currentCol, workToday, scheduleData, daysData, weeklyWorkLeft, currentStreak, closureData) {
+  let minBuffer = Infinity;
+  let streak = currentStreak[adminIndex];
+  let target = weeklyWorkLeft[adminIndex];
+  let workedInWeek = 5 - target;
+
+  // Apply today's choice
+  if (workToday) {
+    streak++;
+    workedInWeek++;
+  } else {
+    streak = 0;
+  }
+
+  // If today is Sunday, the loop below will start a new week immediately
+  const startDay = DAY_MAP[normalizeCell(daysData[currentCol])];
+
+  for (let c = currentCol + 1; c < daysData.length; c++) {
+    const dayOfWeek = DAY_MAP[normalizeCell(daysData[c])];
+    
+    // Reset on Monday
+    if (dayOfWeek === 1) {
+      const buffer = workedInWeek - 5;
+      if (buffer < minBuffer) minBuffer = buffer;
+      workedInWeek = 0;
+    }
+
+    const holiday = isHoliday(closureData[c]);
+    const requestedOff = isRequestedOff(scheduleData[adminIndex][c]);
+
+    if (holiday) {
+      workedInWeek++; // Holidays count towards the 5 shifts
+      streak++;
+    } else if (!requestedOff && streak < 6 && workedInWeek < 5) {
+      workedInWeek++;
+      streak++;
+    } else {
+      streak = 0;
+    }
+  }
+
+  // Final week check
+  const finalBuffer = workedInWeek - 5;
+  if (finalBuffer < minBuffer) minBuffer = finalBuffer;
+
+  return minBuffer;
 }
