@@ -62,6 +62,8 @@ function generateSchedule() {
       .sort((a, b) => b.score - a.score);
 
     let results = new Array(numAdmins).fill("");
+    const isLastDay = (c === daysData.length - 1);
+    let mandatoryAssigned = 0;
 
     // 5. Assigning Roles
     // Priority: 1st Střížkov -> 1st Palmovka -> 2nd Střížkov -> 2nd Palmovka
@@ -69,23 +71,35 @@ function generateSchedule() {
     // Assign 1st person to Střížkov
     if (needsStrizkov > 0 && availableAdmins.length > 0) {
       assignShift(results, availableAdmins, weeklyWorkLeft, "Střížkov");
+      mandatoryAssigned++;
     }
 
     // Assign 1st person to Palmovka
     if (needsPalmovka > 0 && availableAdmins.length > 0) {
       assignShift(results, availableAdmins, weeklyWorkLeft, "Palmovka");
+      mandatoryAssigned++;
     }
 
     // Assign 2nd person to Střížkov (the "Preferred" staff)
     // Only assign if this specific admin can take the optional shift safely.
     if (needsStrizkov > 1 && availableAdmins.length > 0) {
-      assignOptionalShiftIfSafe(results, availableAdmins, weeklyWorkLeft, "Střížkov", c, scheduleData, daysData, numAdmins, closureData);
+      if (isLastDay && mandatoryAssigned < 3) {
+        assignShift(results, availableAdmins, weeklyWorkLeft, "Střížkov");
+        mandatoryAssigned++;
+      } else {
+        assignOptionalShiftIfSafe(results, availableAdmins, weeklyWorkLeft, "Střížkov", c, scheduleData, daysData, numAdmins, closureData);
+      }
     }
 
     // Assign 2nd person to Palmovka as the last-priority optional shift
     // Only assign if this specific admin can take the optional shift safely.
     if (needsPalmovka > 1 && availableAdmins.length > 0) {
-      assignOptionalShiftIfSafe(results, availableAdmins, weeklyWorkLeft, "Palmovka", c, scheduleData, daysData, numAdmins, closureData);
+      if (isLastDay && mandatoryAssigned < 3) {
+        assignShift(results, availableAdmins, weeklyWorkLeft, "Palmovka");
+        mandatoryAssigned++;
+      } else {
+        assignOptionalShiftIfSafe(results, availableAdmins, weeklyWorkLeft, "Palmovka", c, scheduleData, daysData, numAdmins, closureData);
+      }
     }
 
     applyDayResults(c, numAdmins, scheduleData, results, current_streak, closureData);
@@ -293,6 +307,7 @@ function getNeedsForDay(closureLabel = "") {
 function canCoverFutureMandatoryShifts(currentCol, capacities, scheduleData, daysData, numAdmins, closureData) {
   // Identify the end of the current scheduling week
   const endOfWeek = findEndOfWeek(currentCol, daysData);
+  const lastDayIndex = daysData.length - 1;
 
   // Simulate assigning future mandatory shifts (1st Strizkov and 1st Palmovka)
   for (let c = currentCol + 1; c <= endOfWeek; c++) {
@@ -303,6 +318,11 @@ function canCoverFutureMandatoryShifts(currentCol, capacities, scheduleData, day
 
     const { needsPalmovka, needsStrizkov } = getNeedsForDay(closureData ? closureData[c] : "");
     let mandatoryToday = (needsPalmovka > 0 ? 1 : 0) + (needsStrizkov > 0 ? 1 : 0);
+
+    // Requirement: On the last day of the month, we need 3 people available.
+    if (c === lastDayIndex) {
+      mandatoryToday = Math.min(3, needsPalmovka + needsStrizkov);
+    }
 
     // Get admins available today (not NE), sorted by remaining work days descending
     let availableToday = [];
