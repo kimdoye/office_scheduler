@@ -47,8 +47,12 @@ function generateSchedule() {
 
     const adminStatuses = getAdminStatusesForDay(c, numAdmins, scheduleData, daysData, weeklyWorkLeft, current_streak, closureData);
 
+    const isFirstDay = (c === 0);
+    const isLastDay = (c === daysData.length - 1);
+    const isFirstOrLast = isFirstDay || isLastDay;
+
     // 3. Define Needs based on Location Logic
-    const { needsPalmovka, needsStrizkov } = getNeedsForDay(closureData[c]);
+    const { needsPalmovka, needsStrizkov } = getNeedsForDay(closureData[c], isFirstOrLast);
 
     // 3b. Special Holiday Logic: Everyone uses one weekly day, nobody is scheduled
     const holiday = isHoliday(closureData[c]);
@@ -62,7 +66,6 @@ function generateSchedule() {
       .sort((a, b) => b.score - a.score);
 
     let results = new Array(numAdmins).fill("");
-    const isLastDay = (c === daysData.length - 1);
     let mandatoryAssigned = 0;
 
     // 5. Assigning Roles
@@ -83,7 +86,7 @@ function generateSchedule() {
     // Assign 2nd person to Střížkov (the "Preferred" staff)
     // Only assign if this specific admin can take the optional shift safely.
     if (needsStrizkov > 1 && availableAdmins.length > 0) {
-      if (isLastDay && mandatoryAssigned < 3) {
+      if (isFirstOrLast && mandatoryAssigned < 3) {
         assignShift(results, availableAdmins, weeklyWorkLeft, "Střížkov");
         mandatoryAssigned++;
       } else {
@@ -94,7 +97,7 @@ function generateSchedule() {
     // Assign 2nd person to Palmovka as the last-priority optional shift
     // Only assign if this specific admin can take the optional shift safely.
     if (needsPalmovka > 1 && availableAdmins.length > 0) {
-      if (isLastDay && mandatoryAssigned < 3) {
+      if (isFirstOrLast && mandatoryAssigned < 3) {
         assignShift(results, availableAdmins, weeklyWorkLeft, "Palmovka");
         mandatoryAssigned++;
       } else {
@@ -276,18 +279,16 @@ function buildScheduleBackgrounds(scheduleData, baseBackgrounds) {
 /**
  * Helper to determine staffing needs for a given day.
  */
-function getNeedsForDay(closureLabel = "") {
+function getNeedsForDay(closureLabel = "", isFirstOrLastDay = false) {
   let needsPalmovka = 2;
   let needsStrizkov = 2;
 
-
-  // Handle closures based on row 2 labels
   if (closureLabel) {
     const labelUpper = normalizeCellUpper(closureLabel);
     if (labelUpper === "HOLIDAY") {
       needsPalmovka = 0;
       needsStrizkov = 0;
-    } else {
+    } else if (!isFirstOrLastDay) {
       if (labelUpper.includes("PALMOVKA")) {
         needsPalmovka = 0;
       }
@@ -316,11 +317,12 @@ function canCoverFutureMandatoryShifts(currentCol, capacities, scheduleData, day
       continue; // No mandatory shifts on holidays
     }
 
-    const { needsPalmovka, needsStrizkov } = getNeedsForDay(closureData ? closureData[c] : "");
+    const isFirstOrLast = (c === 0 || c === lastDayIndex);
+    const { needsPalmovka, needsStrizkov } = getNeedsForDay(closureData ? closureData[c] : "", isFirstOrLast);
     let mandatoryToday = (needsPalmovka > 0 ? 1 : 0) + (needsStrizkov > 0 ? 1 : 0);
 
-    // Requirement: On the last day of the month, we need 3 people available.
-    if (c === lastDayIndex) {
+    // Requirement: On the first or last day of the month, we need 3 people available.
+    if (isFirstOrLast) {
       mandatoryToday = Math.min(3, needsPalmovka + needsStrizkov);
     }
 
