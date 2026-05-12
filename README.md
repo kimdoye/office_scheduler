@@ -1,22 +1,21 @@
 # Office Scheduler for Google Sheets
 
-An automated scheduling solution built with Google Apps Script to manage staff assignments across multiple locations for bro-coli. This tool generates monthly calendar templates and auto-assigns staff based on availability, workload limits, and specific office closure rules.
+An automated scheduling solution built with Google Apps Script to manage staff assignments across multiple locations. This tool generates monthly calendar templates and auto-assigns staff based on availability, workload limits, consecutive work day constraints, and configurable office closure rules.
 
 ## 🚀 Features
 
-- **Custom Spreadsheet Menu**: Adds a "Custom Tools" menu directly to the Google Sheets toolbar.
+- **Custom Spreadsheet Menu**: Adds a "Custom Tools" menu directly to the Google Sheets toolbar for easy access.
 - **Dynamic Template Generation**:
-  - Creates a full monthly calendar based on month/year inputs.
+  - Creates a full monthly calendar based on month and year inputs.
   - Automatically pulls staff names and inherits their background colors for better visual organization.
   - Applies professional formatting (borders, column widths, and font styles).
+  - Automatically maps configurable weekly location closures and holidays into the generated month calendar.
 - **Intelligent Scheduling Logic**:
-  - **Availability Aware**: Respects "NE" (Requested Off) markers.
-  - **Workload Balancing**: Limits staff to a maximum of 5 days per week.
-  - **Location-Specific Rules**:
-    - **Wed/Sat**: Palmovka closed, assigns 2 people to Střížkov.
-    - **Fri**: Střížkov closed, assigns 1 person to Palmovka.
-    - **Other days**: Assigns 1 to Palmovka and 2 to Střížkov.
-  - **Rest Logic**: Prioritizes staff who had the previous day off.
+  - **Availability Aware**: Respects "NE" (Requested Off) markers on the schedule.
+  - **Workload Balancing**: Limits staff to a maximum of 5 days per week, tracking initial state for accurate mid-week transitions.
+  - **Consecutive Days Logic**: Encourages contiguous work days while enforcing a maximum limit (penalizes working a 6th consecutive day).
+  - **Dynamic Location Needs**: Assigns staff to "Střížkov" and "Palmovka", automatically prioritizing mandatory coverage before optional secondary shifts.
+  - **Holiday & Closure Aware**: Adjusts capacity requirements intelligently when locations are marked as closed or on a global holiday.
 
 ## 🛠️ Setup & Installation
 
@@ -31,26 +30,31 @@ Since this is a Google Apps Script "Bound Script," follow these steps:
 
 ## 📖 How to Use
 
-### 1. Prepare the Input
-On your active sheet:
-- Set **A1** to the Month number (e.g., `4` for April).
-- Set **B1** to the Year (e.g., `2026`).
-- List staff names in column **A** starting from **A4**. You can set background colors for these names to color-code their rows in the generated template.
+### 1. Prepare the Input Data (Source Sheet)
+On your active sheet (e.g., "Config"), define the parameters starting from row 4:
+- **A1**: Month number (e.g., `4` for April).
+- **B1**: Year (e.g., `2026`).
+- **Column A (A4 downwards)**: Staff Names. You can set background colors for these names to color-code their rows in the generated template.
+- **Column B**: Initial "Days Worked" count for the current week (useful when generating partial weeks or mid-month).
+- **Column C**: Initial "Consecutive Days" worked prior to the 1st of the month.
+- **Column E**: Holiday dates (day numbers, e.g., `15`).
+- **Column F**: Location names (e.g., "Palmovka", "Střížkov").
+- **Columns G-M**: Mark "X" to define weekly closures (Monday to Sunday) for the corresponding location in Column F.
 
 ### 2. Generate Template
-Select `Custom Tools > Generate Month Template`. This creates a new tab named after the month (e.g., "April").
+Select `Custom Tools > Generate Month Template`. This creates a new tab named after the month (e.g., "April") with the calendar layout, dates, closed days labeled at the top, and all staff loaded.
 
 ### 3. Mark Availability
-In the new month sheet, mark days where staff are unavailable by entering **"NE"** in their respective cells.
+In the newly generated month sheet, mark specific days where staff are unavailable by entering **"NE"** in their respective cells.
 
 ### 4. Run Scheduler
-Select `Custom Tools > Generate Schedule`. The script will fill in the remaining cells with "Střížkov" or "Palmovka" based on the business rules.
+Select `Custom Tools > Generate Schedule`. The script will calculate the optimal schedule based on availability, remaining weekly capacity, streak continuity, and dynamic staffing needs. It will fill the cells with the appropriate location names (e.g., "Střížkov", "Palmovka").
 
 ## 📂 Project Structure
 
 - `menu.js`: UI configuration for the Google Sheets menu.
-- `month_template.js`: Logic for calculating dates, formatting cells, and setting up the sheet layout.
-- `scheduler.js`: The "brain" of the project containing the assignment algorithm and business constraints.
+- `month_template.js`: Logic for calculating dates, layout generation, parsing input closures/holidays, and setting up the sheet formatting.
+- `scheduler.js`: The "brain" of the project containing the assignment algorithm, capacity tracking, lookahead validation, and scoring constraints.
 
 ---
 
