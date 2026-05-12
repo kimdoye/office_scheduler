@@ -221,7 +221,7 @@ function applyDayResults(currentCol, numAdmins, scheduleData, results, currentSt
   for (let r = 0; r < numAdmins; r++) {
     const holiday = isHoliday(closureData[currentCol]);
 
-    if (results[r] !== "" || holiday) {
+    if (results[r] !== "") {
       currentStreak[r]++;
     } else {
       currentStreak[r] = 0;
