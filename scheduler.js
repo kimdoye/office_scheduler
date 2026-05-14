@@ -45,10 +45,14 @@ function generateSchedule() {
       weeklyWorkLeft = new Array(numAdmins).fill(5);
     }
 
-    const adminStatuses = getAdminStatusesForDay(c, numAdmins, scheduleData, daysData, weeklyWorkLeft, current_streak);
+    const adminStatuses = getAdminStatusesForDay(c, numAdmins, scheduleData, daysData, weeklyWorkLeft, current_streak, closureData);
+
+    const isFirstDay = (c === 0);
+    const isLastDay = (c === daysData.length - 1);
+    const isFirstOrLast = isFirstDay || isLastDay;
 
     // 3. Define Needs based on Location Logic
-    const { needsPalmovka, needsStrizkov } = getNeedsForDay(closureData[c]);
+    const { needsPalmovka, needsStrizkov } = getNeedsForDay(closureData[c], isFirstOrLast);
 
     // 3b. Special Holiday Logic: Everyone uses one weekly day, nobody is scheduled
     const holiday = isHoliday(closureData[c]);
@@ -62,6 +66,7 @@ function generateSchedule() {
       .sort((a, b) => b.score - a.score);
 
     let results = new Array(numAdmins).fill("");
+    let mandatoryAssigned = 0;
 
     // 5. Assigning Roles
     // Priority: 1st Střížkov -> 1st Palmovka -> 2nd Střížkov -> 2nd Palmovka
@@ -69,30 +74,38 @@ function generateSchedule() {
     // Assign 1st person to Střížkov
     if (needsStrizkov > 0 && availableAdmins.length > 0) {
       assignShift(results, availableAdmins, weeklyWorkLeft, "Střížkov");
+      mandatoryAssigned++;
     }
 
     // Assign 1st person to Palmovka
     if (needsPalmovka > 0 && availableAdmins.length > 0) {
       assignShift(results, availableAdmins, weeklyWorkLeft, "Palmovka");
+      mandatoryAssigned++;
     }
 
     // Assign 2nd person to Střížkov (the "Preferred" staff)
-    // Only assign if we have enough capacity for mandatory shifts for the rest of the week
+    // Only assign if this specific admin can take the optional shift safely.
     if (needsStrizkov > 1 && availableAdmins.length > 0) {
-      if (hasEnoughCapacityForRestOfWeek(c, weeklyWorkLeft, scheduleData, daysData, numAdmins, closureData)) {
+      if (isFirstOrLast && mandatoryAssigned < 3) {
         assignShift(results, availableAdmins, weeklyWorkLeft, "Střížkov");
+        mandatoryAssigned++;
+      } else {
+        assignOptionalShiftIfSafe(results, availableAdmins, weeklyWorkLeft, "Střížkov", c, scheduleData, daysData, numAdmins, closureData);
       }
     }
 
     // Assign 2nd person to Palmovka as the last-priority optional shift
-    // Only assign if we still have enough capacity for mandatory shifts for the rest of the week
+    // Only assign if this specific admin can take the optional shift safely.
     if (needsPalmovka > 1 && availableAdmins.length > 0) {
-      if (hasEnoughCapacityForRestOfWeek(c, weeklyWorkLeft, scheduleData, daysData, numAdmins, closureData)) {
+      if (isFirstOrLast && mandatoryAssigned < 3) {
         assignShift(results, availableAdmins, weeklyWorkLeft, "Palmovka");
+        mandatoryAssigned++;
+      } else {
+        assignOptionalShiftIfSafe(results, availableAdmins, weeklyWorkLeft, "Palmovka", c, scheduleData, daysData, numAdmins, closureData);
       }
     }
 
-    applyDayResults(c, numAdmins, scheduleData, results, current_streak);
+    applyDayResults(c, numAdmins, scheduleData, results, current_streak, closureData);
   }
 
   // 7. Write everything back
@@ -139,24 +152,34 @@ function findEndOfWeek(currentCol, daysData) {
   return endOfWeek;
 }
 
-function getAdminStatusesForDay(currentCol, numAdmins, scheduleData, daysData, weeklyWorkLeft, currentStreak) {
+function getAdminStatusesForDay(currentCol, numAdmins, scheduleData, daysData, weeklyWorkLeft, currentStreak, closureData) {
   const statuses = [];
 
   for (let r = 0; r < numAdmins; r++) {
     const streak = currentStreak[r];
+    const isHolidayToday = isHoliday(closureData[currentCol]);
+    
+    // Check if taking today off would make it impossible to reach 5 shifts in some future week
+    const forcedToWork = !isHolidayToday && !isRequestedOff(scheduleData[r][currentCol]) && 
+                         isForcedToWork(r, currentCol, scheduleData, daysData, weeklyWorkLeft, currentStreak, closureData);
 
     statuses.push({
       index: r,
       canWork: !isRequestedOff(scheduleData[r][currentCol]) && weeklyWorkLeft[r] !== 0 && streak < 6,
-      score: calculateAdminScore(r, currentCol, scheduleData, daysData, weeklyWorkLeft, streak)
+      score: calculateAdminScore(r, currentCol, scheduleData, daysData, weeklyWorkLeft, streak, forcedToWork)
     });
   }
 
   return statuses;
 }
 
-function calculateAdminScore(adminIndex, currentCol, scheduleData, daysData, weeklyWorkLeft, streak) {
+function calculateAdminScore(adminIndex, currentCol, scheduleData, daysData, weeklyWorkLeft, streak, forcedToWork) {
   let score = 0;
+
+  // PRIORITY 1: Forced to work (Lookahead failure)
+  if (forcedToWork) {
+    score += 1000;
+  }
 
   // Points for scheduling scarcity (Max 50)
   // The fewer available days they have left compared to the shifts they need, the more points.
@@ -207,17 +230,41 @@ function assignShift(results, availableAdmins, weeklyWorkLeft, location) {
   weeklyWorkLeft[admin.index] = Math.max(0, weeklyWorkLeft[admin.index] - 1);
 }
 
-function applyDayResults(currentCol, numAdmins, scheduleData, results, currentStreak) {
+function assignOptionalShiftIfSafe(results, availableAdmins, weeklyWorkLeft, location, currentCol, scheduleData, daysData, numAdmins, closureData) {
+  for (let i = 0; i < availableAdmins.length; i++) {
+    const admin = availableAdmins[i];
+    const capacities = [...weeklyWorkLeft];
+    const capacityAfterOptionalShift = Math.max(0, capacities[admin.index] - 1);
+    capacities[admin.index] = capacityAfterOptionalShift;
+
+    if (canCoverFutureMandatoryShifts(currentCol, capacities, scheduleData, daysData, numAdmins, closureData)) {
+      availableAdmins.splice(i, 1);
+      results[admin.index] = location;
+      weeklyWorkLeft[admin.index] = capacityAfterOptionalShift;
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function applyDayResults(currentCol, numAdmins, scheduleData, results, currentStreak, closureData) {
   for (let r = 0; r < numAdmins; r++) {
-    if (results[r] !== "") {
+    const holiday = isHoliday(closureData[currentCol]);
+
+    if (holiday) {
+      currentStreak[r] = 0;
+    } else if (results[r] !== "") {
       currentStreak[r]++;
     } else {
       currentStreak[r] = 0;
     }
 
-    if (isRequestedOff(scheduleData[r][currentCol])) {
+    if (holiday) {
+      scheduleData[r][currentCol] = "";
+    } else if (isRequestedOff(scheduleData[r][currentCol])) {
       scheduleData[r][currentCol] = "NE";
-    } else {
+    } else if (!holiday) {
       scheduleData[r][currentCol] = results[r];
     }
   }
@@ -232,18 +279,16 @@ function buildScheduleBackgrounds(scheduleData, baseBackgrounds) {
 /**
  * Helper to determine staffing needs for a given day.
  */
-function getNeedsForDay(closureLabel = "") {
+function getNeedsForDay(closureLabel = "", isFirstOrLastDay = false) {
   let needsPalmovka = 2;
   let needsStrizkov = 2;
 
-
-  // Handle closures based on row 2 labels
   if (closureLabel) {
     const labelUpper = normalizeCellUpper(closureLabel);
     if (labelUpper === "HOLIDAY") {
       needsPalmovka = 0;
       needsStrizkov = 0;
-    } else {
+    } else if (!isFirstOrLastDay) {
       if (labelUpper.includes("PALMOVKA")) {
         needsPalmovka = 0;
       }
@@ -257,15 +302,13 @@ function getNeedsForDay(closureLabel = "") {
 }
 
 /**
- * Checks if assigning an extra optional shift today would leave enough capacity
- * for mandatory shifts (1st Strizkov and 1st Palmovka) for the rest of the week.
+ * Checks whether the remaining capacities can cover mandatory future shifts
+ * (1st Střížkov and 1st Palmovka) for the rest of the current week.
  */
-function hasEnoughCapacityForRestOfWeek(currentCol, weeklyWorkLeft, scheduleData, daysData, numAdmins, closureData) {
+function canCoverFutureMandatoryShifts(currentCol, capacities, scheduleData, daysData, numAdmins, closureData) {
   // Identify the end of the current scheduling week
   const endOfWeek = findEndOfWeek(currentCol, daysData);
-
-  // Copy remaining work days to simulate future mandatory shifts
-  let capacities = [...weeklyWorkLeft];
+  const lastDayIndex = daysData.length - 1;
 
   // Simulate assigning future mandatory shifts (1st Strizkov and 1st Palmovka)
   for (let c = currentCol + 1; c <= endOfWeek; c++) {
@@ -274,8 +317,14 @@ function hasEnoughCapacityForRestOfWeek(currentCol, weeklyWorkLeft, scheduleData
       continue; // No mandatory shifts on holidays
     }
 
-    const { needsPalmovka, needsStrizkov } = getNeedsForDay(closureData ? closureData[c] : "");
+    const isFirstOrLast = (c === 0 || c === lastDayIndex);
+    const { needsPalmovka, needsStrizkov } = getNeedsForDay(closureData ? closureData[c] : "", isFirstOrLast);
     let mandatoryToday = (needsPalmovka > 0 ? 1 : 0) + (needsStrizkov > 0 ? 1 : 0);
+
+    // Requirement: On the first or last day of the month, we need 3 people available.
+    if (isFirstOrLast) {
+      mandatoryToday = Math.min(3, needsPalmovka + needsStrizkov);
+    }
 
     // Get admins available today (not NE), sorted by remaining work days descending
     let availableToday = [];
@@ -297,8 +346,66 @@ function hasEnoughCapacityForRestOfWeek(currentCol, weeklyWorkLeft, scheduleData
     }
   }
 
-  // After fulfilling all future mandatory shifts, we must have at least 1 spare capacity 
-  // left across all admins to afford assigning today's optional shift.
-  let remainingCapacity = capacities.reduce((sum, val) => sum + val, 0);
-  return remainingCapacity > 0;
+  return true;
+}
+
+/**
+ * Determines if an admin MUST work today because taking it off would
+ * lead to a failed schedule (under 5 shifts) in a future week due to streak limits.
+ */
+function isForcedToWork(adminIndex, currentCol, scheduleData, daysData, weeklyWorkLeft, currentStreak, closureData) {
+  // Scenario A: Work Today
+  const canIfWork = canSatisfyVisibleWeeklyTargets(adminIndex, currentCol, true, scheduleData, daysData, weeklyWorkLeft, currentStreak, closureData);
+  
+  // Scenario B: Take Today Off
+  const canIfOff = canSatisfyVisibleWeeklyTargets(adminIndex, currentCol, false, scheduleData, daysData, weeklyWorkLeft, currentStreak, closureData);
+
+  // Forced only when working today fixes a failure that taking today off would cause.
+  return !canIfOff && canIfWork;
+}
+
+/**
+ * Simulates whether an admin can still satisfy all full visible weekly targets.
+ * A trailing partial week is ignored unless the visible data ends on Sunday.
+ */
+function canSatisfyVisibleWeeklyTargets(adminIndex, currentCol, workToday, scheduleData, daysData, weeklyWorkLeft, currentStreak, closureData) {
+  let streak = currentStreak[adminIndex];
+  let remainingNeed = weeklyWorkLeft[adminIndex];
+
+  // Apply today's choice
+  if (isHoliday(closureData[currentCol])) {
+    remainingNeed = Math.max(0, remainingNeed - 1);
+    streak = 0;
+  } else if (workToday) {
+    streak++;
+    remainingNeed = Math.max(0, remainingNeed - 1);
+  } else {
+    streak = 0;
+  }
+
+  for (let c = currentCol + 1; c < daysData.length; c++) {
+    const dayOfWeek = DAY_MAP[normalizeCell(daysData[c])];
+    
+    // A Monday starts a new week, so the previous visible week must be complete.
+    if (dayOfWeek === 1) {
+      if (remainingNeed > 0) return false;
+      remainingNeed = 5;
+    }
+
+    const holiday = isHoliday(closureData[c]);
+    const requestedOff = isRequestedOff(scheduleData[adminIndex][c]);
+
+    if (holiday) {
+      remainingNeed = Math.max(0, remainingNeed - 1);
+      streak = 0;
+    } else if (!requestedOff && streak < 6 && remainingNeed > 0) {
+      remainingNeed--;
+      streak++;
+    } else {
+      streak = 0;
+    }
+  }
+
+  const lastDay = DAY_MAP[normalizeCell(daysData[daysData.length - 1])];
+  return lastDay !== 0 || remainingNeed === 0;
 }
